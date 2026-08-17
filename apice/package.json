@@ -1,0 +1,45 @@
+{
+  "name": "apice",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Ápice — app de nutrição por foto e treino com ranking mundial de força",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "smoke": "node scripts/smoke.mjs",
+    "sync": "npm run build && npx cap sync ios",
+    "ios": "npm run sync && npx cap open ios",
+    "capturas": "node scripts/capturas-loja.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
+    "@capacitor/app": "^6.0.3",
+    "@capacitor/camera": "^6.1.3",
+    "@capacitor/core": "^6.2.1",
+    "@capacitor/haptics": "^6.0.3",
+    "@capacitor/ios": "^6.2.1",
+    "@capacitor/preferences": "^6.0.4",
+    "@capacitor/splash-screen": "^6.0.4",
+    "@capacitor/status-bar": "^6.0.3",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.15.0",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.1",
+    "@types/react": "^18.3.17",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "playwright": "^1.62.1",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  }
+}

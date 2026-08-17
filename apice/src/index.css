@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-ink-950 text-slate-100 antialiased;
+    background-image:
+      radial-gradient(900px 500px at 15% -8%, rgba(198, 242, 78, 0.08), transparent 60%),
+      radial-gradient(760px 460px at 92% 4%, rgba(78, 195, 242, 0.07), transparent 62%);
+    background-attachment: fixed;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Zera o visual nativo do number sem perder o teclado numérico no celular. */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-ink-600;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  .cartao {
+    @apply rounded-2xl border border-white/[0.07] bg-ink-850/80 backdrop-blur-sm;
+  }
+
+  .campo {
+    @apply w-full rounded-xl border border-white/10 bg-ink-900 px-3.5 py-2.5 text-[15px] text-slate-100
+           outline-none transition placeholder:text-slate-500
+           focus:border-lime/50 focus:ring-2 focus:ring-lime/20;
+  }
+
+  .rotulo {
+    @apply mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-400;
+  }
+
+  .barra {
+    @apply h-2 overflow-hidden rounded-full bg-white/[0.07];
+  }
+
+  .esqueleto {
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.04) 25%, rgba(255, 255, 255, 0.1) 50%, rgba(255, 255, 255, 0.04) 75%);
+    background-size: 800px 100%;
+    @apply animate-shimmer rounded-lg;
+  }
+
+  /* Área segura para o notch e a barra inferior do iOS. */
+  .pb-safe {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+  }
+  .pt-safe {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+  }
+}

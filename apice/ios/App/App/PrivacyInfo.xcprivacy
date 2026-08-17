@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+		Manifesto de privacidade — obrigatório desde maio de 2024. O App Store
+		Connect recusa o binário se um "required reason API" for usado sem
+		declaração aqui.
+
+		IMPORTANTE: este arquivo precisa estar adicionado ao target App no
+		Xcode (clique direito na pasta App › Add Files to "App"…). Só existir
+		no disco não basta — ele tem que entrar no bundle.
+	-->
+
+	<!-- O app não rastreia usuários nem usa a App Tracking Transparency. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+
+	<!--
+		Nenhum dado é coletado pelo desenvolvedor: tudo fica no aparelho.
+		As fotos vão direto do aparelho para a API da Anthropic, sob a chave
+		do próprio usuário — não passam por servidor nosso e não são
+		coletadas por nós.
+	-->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<!-- UserDefaults, usado pelo Capacitor Preferences para guardar
+			     perfil, refeições e treinos no próprio app. -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+		<dict>
+			<!-- Timestamps de arquivo, acessados pela WebView e pelo cache
+			     de imagens dentro do container do app. -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+		<dict>
+			<!-- Espaço livre em disco, consultado antes de gravar imagens. -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>E174.1</string>
+			</array>
+		</dict>
+		<dict>
+			<!-- systemUptime, usado pelo runtime para medir intervalos. -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
