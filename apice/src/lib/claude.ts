@@ -1,18 +1,44 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { AnaliseFoto, Macros, Metas } from '../types'
+import { ehNativo, fetchNativo } from './nativo'
 
 // ---------------------------------------------------------------------------
 // Integração com a Claude API.
 //
-// As chamadas saem direto do navegador com a chave do próprio usuário, guardada
-// apenas no localStorage do aparelho. É o desenho certo para um app pessoal —
-// nenhum servidor intermediário vê os dados — mas significa que a chave fica
-// acessível a qualquer script rodando na página: use uma chave dedicada e com
-// limite de gasto. Para uso multiusuário, troque `criarCliente` por chamadas a
-// um backend próprio que guarde a chave do lado servidor.
+// As chamadas saem direto do aparelho com a chave do próprio usuário — nenhum
+// servidor intermediário vê as fotos. No app iOS a chave fica em UserDefaults
+// (via Preferences) e a análise sai pela camada nativa; na web fica no
+// localStorage e sai pela WebView.
+//
+// O modelo de confiança é "chave do usuário no aparelho do usuário": bom para
+// app pessoal, inadequado para multiusuário. Para esse caso, troque
+// `criarCliente` por chamadas a um backend próprio que guarde a chave.
 // ---------------------------------------------------------------------------
 
-export const MODELO = 'claude-opus-5'
+export type ModeloId = 'claude-opus-5' | 'claude-sonnet-5'
+
+export const MODELO_PADRAO: ModeloId = 'claude-opus-5'
+
+export const MODELOS: {
+  id: ModeloId
+  nome: string
+  descricao: string
+  /** Custo aproximado por análise de foto, em dólares. */
+  custoPorAnalise: number
+}[] = [
+  {
+    id: 'claude-opus-5',
+    nome: 'Opus 5',
+    descricao: 'Melhor leitura de porção e de pratos misturados. Recomendado.',
+    custoPorAnalise: 0.03,
+  },
+  {
+    id: 'claude-sonnet-5',
+    nome: 'Sonnet 5',
+    descricao: 'Mais rápido e mais barato; erra mais em prato cheio ou molho escondido.',
+    custoPorAnalise: 0.012,
+  },
+]
 
 export class SemChaveError extends Error {
   constructor() {
@@ -28,13 +54,20 @@ export class RecusaError extends Error {
   }
 }
 
-function criarCliente(apiKey: string): Anthropic {
+/**
+ * @param viaNativo quando true, as requisições saem pela camada nativa do app
+ *   em vez da WebView. Sem WebView não há CORS — a chamada é HTTP comum feita
+ *   pelo processo do app. Em troca perde-se streaming, então só vale para
+ *   respostas que chegam de uma vez.
+ */
+function criarCliente(apiKey: string, viaNativo = false): Anthropic {
   if (!apiKey?.trim()) throw new SemChaveError()
   return new Anthropic({
     apiKey: apiKey.trim(),
     dangerouslyAllowBrowser: true,
     defaultHeaders: { 'anthropic-dangerous-direct-browser-access': 'true' },
     maxRetries: 2,
+    ...(viaNativo && ehNativo() ? { fetch: fetchNativo } : {}),
   })
 }
 
@@ -130,8 +163,10 @@ export async function analisarFoto(
   apiKey: string,
   imagens: { base64: string; mediaType: string }[],
   ctx: ContextoDia,
+  modelo: ModeloId = MODELO_PADRAO,
 ): Promise<AnaliseFoto> {
-  const client = criarCliente(apiKey)
+  // Resposta única, sem streaming: pode sair pela camada nativa e escapar de CORS.
+  const client = criarCliente(apiKey, true)
 
   const restante = {
     kcal: Math.round(ctx.metas.kcal - ctx.consumido.kcal),
@@ -151,7 +186,7 @@ export async function analisarFoto(
     .join('\n')
 
   const resposta = await client.beta.messages.create({
-    model: MODELO,
+    model: modelo,
     max_tokens: 10000,
     betas: ['server-side-fallback-2026-07-01'],
     fallbacks: 'default',
@@ -225,37 +260,61 @@ export async function perguntarCoach(
   historico: MensagemChat[],
   contexto: string,
   onDelta?: (t: string) => void,
+  modelo: ModeloId = MODELO_PADRAO,
 ): Promise<string> {
-  const client = criarCliente(apiKey)
-
-  const stream = client.beta.messages.stream({
-    model: MODELO,
+  const parametros = {
+    model: modelo,
     max_tokens: 4000,
     betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',
+    fallbacks: 'default' as const,
     system: [
-      { type: 'text', text: SISTEMA_COACH },
-      { type: 'text', text: `Contexto atual da pessoa:\n${contexto}` },
+      { type: 'text' as const, text: SISTEMA_COACH },
+      { type: 'text' as const, text: `Contexto atual da pessoa:\n${contexto}` },
     ],
-    output_config: { effort: 'low' },
+    output_config: { effort: 'low' as const },
     messages: historico.map((m) => ({ role: m.role, content: m.content })),
-  })
-
-  if (onDelta) stream.on('text', onDelta)
-
-  const final = await stream.finalMessage()
-  if (final.stop_reason === 'refusal') {
-    throw new RecusaError(final.stop_details?.explanation ?? undefined)
   }
-  return textoDe(final.content as Array<{ type: string; text?: string }>)
+
+  // Streaming pela WebView é o caminho bom: o texto aparece aos poucos. Se a
+  // WebView barrar a chamada (CORS, rede do app), refaz de uma vez só pela
+  // camada nativa — o coach perde o efeito de digitação, não a resposta.
+  try {
+    const stream = criarCliente(apiKey).beta.messages.stream(parametros)
+    if (onDelta) stream.on('text', onDelta)
+    const final = await stream.finalMessage()
+    if (final.stop_reason === 'refusal') {
+      throw new RecusaError(final.stop_details?.explanation ?? undefined)
+    }
+    return textoDe(final.content as Array<{ type: string; text?: string }>)
+  } catch (e) {
+    if (e instanceof RecusaError || !ehNativo() || !ehErroDeTransporte(e)) throw e
+
+    const resposta = await criarCliente(apiKey, true).beta.messages.create(parametros)
+    if (resposta.stop_reason === 'refusal') {
+      throw new RecusaError(resposta.stop_details?.explanation ?? undefined)
+    }
+    const texto = textoDe(resposta.content as Array<{ type: string; text?: string }>)
+    onDelta?.(texto)
+    return texto
+  }
+}
+
+/** Falha de rede/CORS — vale reenviar pela camada nativa. Erro da API, não. */
+function ehErroDeTransporte(e: unknown): boolean {
+  const err = e as { status?: number; message?: string }
+  if (typeof err?.status === 'number') return false
+  return /fetch|network|cors|failed|load/i.test(err?.message ?? '')
 }
 
 /** Testa a chave com a requisição mais barata possível. */
-export async function testarChave(apiKey: string): Promise<{ ok: boolean; erro?: string }> {
+export async function testarChave(
+  apiKey: string,
+  modelo: ModeloId = MODELO_PADRAO,
+): Promise<{ ok: boolean; erro?: string }> {
   try {
-    const client = criarCliente(apiKey)
+    const client = criarCliente(apiKey, true)
     await client.messages.create({
-      model: MODELO,
+      model: modelo,
       max_tokens: 16,
       messages: [{ role: 'user', content: 'ok' }],
     })

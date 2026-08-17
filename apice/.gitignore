@@ -4,3 +4,12 @@ dist/
 *.local
 .DS_Store
 capturas/
+
+# iOS — artefatos de build gerados no Mac
+ios/App/Pods/
+ios/App/App/public/
+ios/App/Podfile.lock
+ios/App/App.xcworkspace/xcuserdata/
+ios/App/App.xcodeproj/xcuserdata/
+DerivedData/
+*.xcuserstate

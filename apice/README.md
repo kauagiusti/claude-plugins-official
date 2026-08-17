@@ -3,7 +3,8 @@
 App de nutrição e treino. Fotografe a refeição e receba kcal e macros na hora; registre a série e veja onde sua
 carga está em relação a quem treina — por peso, sexo e idade.
 
-Funciona no navegador, instalável como app no celular (PWA). Todos os dados ficam no aparelho.
+Roda como app nativo no iPhone (projeto iOS pronto em `ios/`) e como PWA no navegador. Todos os dados ficam no
+aparelho — sem conta, sem servidor.
 
 ---
 
@@ -55,24 +56,54 @@ npm run build        # gera dist/
 npm run preview      # serve o build em :4173
 npm run typecheck
 npm run smoke        # smoke test em navegador real (precisa do preview no ar)
+
+npm run sync         # leva o build para o projeto iOS
+npm run ios          # sync + abre o Xcode (só no Mac)
+npm run capturas     # capturas da App Store, no tamanho exigido
 ```
 
-### Chave da Claude API
+### Conectar o Claude
 
-A análise por foto e o coach precisam de uma chave da [Claude API](https://console.anthropic.com) — pegue em
-**API Keys** e cole em **Ajustes › Análise por foto**. O resto do app (tabela de alimentos, treino completo,
-ranking de força, recomendações locais, gráficos) funciona sem chave nenhuma.
+A análise por foto e o coach usam a Claude API com a **sua** chave, configurada em
+**Ajustes › Conectar Claude**. A tela tem teste de conexão, escolha entre Opus 5 e Sonnet 5 e estimativa de
+gasto por análise. Todo o resto do app — tabela de alimentos, treino completo, ranking de força, recomendações
+locais e gráficos — funciona sem chave nenhuma.
 
-> **Sobre a chave:** as chamadas saem direto do navegador para a Anthropic, sem servidor intermediário — suas
-> fotos não passam por lugar nenhum além disso. Em troca, a chave fica no `localStorage` e é legível por qualquer
-> script carregado na página. Use uma chave dedicada, com limite de gasto configurado no console. Se um dia isso
-> virar multiusuário, troque `criarCliente` em `src/lib/claude.ts` por chamadas a um backend que guarde a chave do
-> lado servidor.
+Pegue a chave em [console.anthropic.com](https://console.anthropic.com) › *Settings › API Keys*. Vale criar uma
+chave dedicada, com limite de gasto: ela fica salva num aparelho.
 
-### Instalar no celular
+**Como as chamadas saem:**
+
+| | Onde a chave fica | Por onde a requisição vai |
+|---|---|---|
+| App iOS | UserDefaults, no container do app | Camada nativa — sem CORS, sem WebView no caminho |
+| Navegador | `localStorage` | `fetch` da página, direto para `api.anthropic.com` |
+
+Em nenhum dos dois casos existe servidor intermediário: suas fotos vão do aparelho para a Anthropic e mais nada.
+A contrapartida, na web, é que a chave é legível por qualquer script da página. Para uso multiusuário, troque
+`criarCliente` em `src/lib/claude.ts` por chamadas a um backend que guarde a chave do lado servidor.
+
+### App para iPhone
+
+O projeto iOS já está gerado com Capacitor em `ios/`. O que falta acontece num Mac:
+
+```bash
+npm run ios          # build + sync + abre o Xcode
+npm run capturas     # capturas 1290×2796 para o App Store Connect
+```
+
+O passo a passo completo — assinatura, manifesto de privacidade, questionário de dados, envio e o que costuma
+travar na revisão — está em **[`loja/README.md`](loja/README.md)**. Os textos da ficha, a política de privacidade
+e as notas para o revisor estão na mesma pasta.
+
+No app nativo o Ápice usa câmera nativa, háptico ao registrar série e armazenamento em UserDefaults — o
+`localStorage` da WKWebView pode ser descartado pelo iOS sob pressão de espaço, o que para meses de histórico
+seria perda real.
+
+### Instalar como PWA
 
 Publique o `dist/` em qualquer host estático (Vercel, Netlify, Cloudflare Pages, GitHub Pages) e abra no celular →
-menu do navegador → **Adicionar à tela de início**. O manifesto e os ícones já estão prontos.
+menu do navegador → **Adicionar à tela de início**.
 
 ---
 
@@ -121,9 +152,14 @@ src/
 │   ├── nutricao.ts         TMB/TDEE, metas, totais, recomendação local
 │   ├── gamificacao.ts      XP, níveis, streak, 26 conquistas
 │   ├── store.ts            estado (zustand + persist) e seletores
-│   └── imagem.ts           redimensionamento antes do envio
-├── components/             UI, analisador de foto, seletor de exercício, gráficos, coach
+│   ├── imagem.ts           redimensionamento antes do envio
+│   └── nativo.ts           câmera, armazenamento, háptico e HTTP nativo (Capacitor)
+├── components/             UI, analisador de foto, conexão Claude, gráficos, coach
 └── pages/                  Hoje · Nutrição · Treino · Ranking · Ajustes · Onboarding
+
+ios/                        projeto Xcode (Capacitor) — abra com `npm run ios`
+loja/                       ficha da App Store, privacidade, notas de revisão, guia
+scripts/                    smoke test e gerador de capturas da loja
 ```
 
 **Decisões que valem saber:**

@@ -1,7 +1,8 @@
-import { Camera, ImagePlus, Sparkles, Trash2, X } from 'lucide-react'
+import { Camera, Images, ImagePlus, Sparkles, Trash2, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { analisarFoto, mensagemDeErro } from '../lib/claude'
 import { prepararImagem, miniatura } from '../lib/imagem'
+import { ehNativo, escolherDaGaleria, tirarFoto, vibrar } from '../lib/nativo'
 import { alertasRefeicao, ROTULO_REFEICAO, somarMacros, tipoRefeicaoPorHora } from '../lib/nutricao'
 import { horaAgora, metasDe, totaisDoDia, useStore } from '../lib/store'
 import type { AnaliseFoto, ItemAlimento, TipoRefeicao } from '../types'
@@ -28,7 +29,9 @@ export function AnalisadorFoto({
 
   const inputRef = useRef<HTMLInputElement>(null)
   const apiKey = useStore((s) => s.apiKey)
+  const modelo = useStore((s) => s.modelo)
   const addRefeicao = useStore((s) => s.addRefeicao)
+  const contarAnalise = useStore((s) => s.contarAnalise)
   const estado = useStore()
 
   function limpar() {
@@ -43,6 +46,24 @@ export function AnalisadorFoto({
   function fechar() {
     limpar()
     aoFechar()
+  }
+
+  /** No app instalado a câmera nativa já entrega a imagem redimensionada. */
+  async function capturar(origem: 'camera' | 'galeria') {
+    setErro(null)
+    if (!ehNativo()) {
+      inputRef.current?.click()
+      return
+    }
+    try {
+      const novas = origem === 'camera' ? [await tirarFoto()] : await escolherDaGaleria()
+      setImagens((atuais) => [...atuais, ...novas].slice(0, 3))
+      await vibrar('leve')
+    } catch (e) {
+      // Usuário cancelando a câmera não é erro que mereça alerta.
+      const msg = (e as Error)?.message ?? ''
+      if (!/cancel/i.test(msg)) setErro(mensagemDeErro(e))
+    }
   }
 
   async function receberArquivos(lista: FileList | null) {
@@ -70,12 +91,16 @@ export function AnalisadorFoto({
           hora: horaAgora(),
           descricaoUsuario: descricao || undefined,
         },
+        modelo,
       )
+      contarAnalise()
+      await vibrar('sucesso')
       setAnalise(resultado)
       setItens(resultado.itens.map((i, idx) => ({ ...i, id: `tmp-${idx}` })))
       setFase('revisar')
     } catch (e) {
       setErro(mensagemDeErro(e))
+      await vibrar('erro')
       setFase('escolher')
     }
   }
@@ -129,23 +154,28 @@ export function AnalisadorFoto({
         <div className="space-y-4">
           {!apiKey && (
             <Aviso tom="atencao">
-              A leitura automática precisa da chave da Claude API — configure em <strong>Ajustes</strong>. Enquanto
+              A leitura automática precisa da chave da Claude API — configure em <strong>Ajustes › Conectar Claude</strong>. Enquanto
               isso, dá para registrar pela tabela de alimentos.
             </Aviso>
           )}
 
           {imagens.length === 0 ? (
-            <button
-              onClick={() => inputRef.current?.click()}
-              className="flex w-full flex-col items-center gap-3 rounded-2xl border-2 border-dashed
-                         border-white/15 py-12 text-slate-400 transition hover:border-lime/40 hover:text-lime"
-            >
-              <Camera size={34} />
-              <span className="text-sm font-medium">Tirar foto ou escolher da galeria</span>
-              <span className="max-w-[16rem] text-center text-xs text-slate-500">
-                Enquadre o prato inteiro. Um talher ou a borda do prato ajudam a acertar a porção.
-              </span>
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={() => capturar('camera')}
+                className="flex w-full flex-col items-center gap-3 rounded-2xl border-2 border-dashed
+                           border-white/15 py-10 text-slate-400 transition hover:border-lime/40 hover:text-lime"
+              >
+                <Camera size={34} />
+                <span className="text-sm font-medium">Tirar foto</span>
+                <span className="max-w-[16rem] text-center text-xs text-slate-500">
+                  Enquadre o prato inteiro. Um talher ou a borda do prato ajudam a acertar a porção.
+                </span>
+              </button>
+              <Botao variante="fantasma" className="w-full" onClick={() => capturar('galeria')}>
+                <Images size={17} /> Escolher da galeria
+              </Botao>
+            </div>
           ) : (
             <div className="space-y-3">
               <div className="grid grid-cols-3 gap-2">
@@ -162,7 +192,7 @@ export function AnalisadorFoto({
                 ))}
                 {imagens.length < 3 && (
                   <button
-                    onClick={() => inputRef.current?.click()}
+                    onClick={() => capturar('camera')}
                     className="flex aspect-square items-center justify-center rounded-xl border-2
                                border-dashed border-white/15 text-slate-500 hover:border-lime/40 hover:text-lime"
                   >

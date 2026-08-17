@@ -1,6 +1,7 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
 import { EXERCICIOS_POR_ID } from '../data/exercicios'
+import { armazenamento } from './nativo'
 import type {
   EstadoJogo,
   Exercicio,
@@ -14,6 +15,8 @@ import type {
   Serie,
   Treino,
 } from '../types'
+import type { ModeloId } from './claude'
+import { MODELO_PADRAO } from './claude'
 import { atualizarStreak, verificarConquistas, XP, xpDaSerie } from './gamificacao'
 import { cargaSistema, classificar, estimar1RM, idadeDe } from './forca'
 import { calcularMetas, somarMacros, totaisRefeicao } from './nutricao'
@@ -63,6 +66,9 @@ const JOGO_PADRAO: EstadoJogo = { xp: 0, conquistas: {}, streakAtual: 0, streakR
 interface Estado {
   perfil: Perfil
   apiKey: string
+  modelo: ModeloId
+  /** Total de análises por foto já feitas — base da estimativa de gasto. */
+  analisesFeitas: number
   onboardingConcluido: boolean
 
   refeicoes: Refeicao[]
@@ -75,9 +81,15 @@ interface Estado {
   /** Conquistas desbloqueadas ainda não exibidas ao usuário. */
   novasConquistas: string[]
 
+  /** false até o estado salvo terminar de carregar (o storage nativo é assíncrono). */
+  hidratado: boolean
+  marcarHidratado: () => void
+
   // --- perfil / ajustes
   setPerfil: (p: Partial<Perfil>) => void
   setApiKey: (k: string) => void
+  setModelo: (m: ModeloId) => void
+  contarAnalise: () => void
   concluirOnboarding: () => void
   registrarPeso: (peso: number, data?: string) => void
 
@@ -122,6 +134,8 @@ export const useStore = create<Estado>()(
     (set, get) => ({
       perfil: PERFIL_PADRAO,
       apiKey: '',
+      modelo: MODELO_PADRAO,
+      analisesFeitas: 0,
       onboardingConcluido: false,
       refeicoes: [],
       treinos: [],
@@ -130,6 +144,9 @@ export const useStore = create<Estado>()(
       jogo: JOGO_PADRAO,
       coach: [],
       novasConquistas: [],
+      hidratado: false,
+
+      marcarHidratado: () => set({ hidratado: true }),
 
       setPerfil: (p) =>
         set((s) => {
@@ -143,6 +160,8 @@ export const useStore = create<Estado>()(
         }),
 
       setApiKey: (k) => set({ apiKey: k.trim() }),
+      setModelo: (m) => set({ modelo: m }),
+      contarAnalise: () => set((s) => ({ analisesFeitas: s.analisesFeitas + 1 })),
       concluirOnboarding: () => set({ onboardingConcluido: true }),
 
       registrarPeso: (peso, data = hojeISO()) =>
@@ -371,6 +390,7 @@ export const useStore = create<Estado>()(
       resetarTudo: () =>
         set({
           perfil: PERFIL_PADRAO,
+          analisesFeitas: 0,
           refeicoes: [],
           treinos: [],
           treinoAtivo: null,
@@ -384,9 +404,13 @@ export const useStore = create<Estado>()(
     {
       name: 'apice-v1',
       version: 1,
+      storage: createJSONStorage(() => armazenamento),
+      onRehydrateStorage: () => (estado) => estado?.marcarHidratado(),
       partialize: (s) => ({
         perfil: s.perfil,
         apiKey: s.apiKey,
+        modelo: s.modelo,
+        analisesFeitas: s.analisesFeitas,
         onboardingConcluido: s.onboardingConcluido,
         refeicoes: s.refeicoes,
         treinos: s.treinos,

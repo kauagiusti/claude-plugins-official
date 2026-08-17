@@ -1,7 +1,8 @@
 import { Check, Download, Key, RotateCcw, Scale, Target, User } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { ConexaoClaude } from '../components/ConexaoClaude'
 import { Aviso, Botao, Campo, Cartao, Chip, Estatistica, Selecao, TituloSecao } from '../components/ui'
-import { mensagemDeErro, MODELO, testarChave } from '../lib/claude'
+
 import { idadeDe } from '../lib/forca'
 import { calcularMetas, ROTULO_ATIVIDADE, ROTULO_OBJETIVO, tdee, tmb } from '../lib/nutricao'
 import { hojeISO, useStore } from '../lib/store'
@@ -10,15 +11,10 @@ import type { NivelAtividade, Objetivo } from '../types'
 export default function Ajustes() {
   const perfil = useStore((s) => s.perfil)
   const setPerfil = useStore((s) => s.setPerfil)
-  const apiKey = useStore((s) => s.apiKey)
-  const setApiKey = useStore((s) => s.setApiKey)
   const registrarPeso = useStore((s) => s.registrarPeso)
   const resetar = useStore((s) => s.resetarTudo)
   const estado = useStore()
 
-  const [chaveRascunho, setChaveRascunho] = useState(apiKey)
-  const [testando, setTestando] = useState(false)
-  const [resultadoTeste, setResultadoTeste] = useState<{ ok: boolean; erro?: string } | null>(null)
   const [pesoNovo, setPesoNovo] = useState('')
   const [confirmarReset, setConfirmarReset] = useState(false)
 
@@ -26,18 +22,6 @@ export default function Ajustes() {
   const manutencao = useMemo(() => Math.round(tdee(perfil)), [perfil])
   const basal = useMemo(() => Math.round(tmb(perfil)), [perfil])
   const usandoManuais = !!perfil.metasManuais
-
-  async function validarChave() {
-    setTestando(true)
-    setResultadoTeste(null)
-    try {
-      setResultadoTeste(await testarChave(chaveRascunho))
-    } catch (e) {
-      setResultadoTeste({ ok: false, erro: mensagemDeErro(e) })
-    } finally {
-      setTestando(false)
-    }
-  }
 
   function exportarDados() {
     const dump = {
@@ -248,49 +232,12 @@ export default function Ajustes() {
         </Cartao>
       </section>
 
-      {/* ---------------------------- Chave da API -------------------------- */}
+      {/* ---------------------------- Conectar Claude ----------------------- */}
       <section>
         <TituloSecao>
-          <Key size={13} className="mr-1 inline" /> Análise por foto
+          <Key size={13} className="mr-1 inline" /> Conectar Claude
         </TituloSecao>
-        <Cartao className="space-y-3">
-          <Campo
-            rotulo="Chave da Claude API"
-            type="password"
-            autoComplete="off"
-            placeholder="sk-ant-..."
-            value={chaveRascunho}
-            onChange={(e) => {
-              setChaveRascunho(e.target.value)
-              setResultadoTeste(null)
-            }}
-          />
-          <div className="flex gap-2">
-            <Botao variante="secundario" onClick={validarChave} disabled={!chaveRascunho.trim() || testando}>
-              {testando ? 'Testando…' : 'Testar'}
-            </Botao>
-            <Botao
-              className="flex-1"
-              onClick={() => setApiKey(chaveRascunho)}
-              disabled={chaveRascunho === apiKey}
-            >
-              <Check size={17} /> Salvar chave
-            </Botao>
-          </div>
-
-          {resultadoTeste && (
-            <Aviso tom={resultadoTeste.ok ? 'ok' : 'alerta'}>
-              {resultadoTeste.ok ? 'Chave válida — a análise por foto está pronta.' : resultadoTeste.erro}
-            </Aviso>
-          )}
-
-          <p className="text-xs leading-relaxed text-slate-500">
-            Modelo usado: <code className="text-slate-400">{MODELO}</code>. As chamadas saem direto deste navegador
-            para a Anthropic — nenhum servidor intermediário guarda suas fotos. A chave fica no armazenamento local
-            do aparelho e qualquer script carregado na página conseguiria lê-la: use uma chave dedicada, com limite
-            de gasto configurado no console.
-          </p>
-        </Cartao>
+        <ConexaoClaude />
       </section>
 
       {/* --------------------------------- Dados ---------------------------- */}

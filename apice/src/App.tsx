@@ -25,12 +25,17 @@ export default function App() {
   const [aba, setAba] = useState<Aba>('hoje')
   const [coachAberto, setCoachAberto] = useState(false)
   const onboardingConcluido = useStore((s) => s.onboardingConcluido)
+  const hidratado = useStore((s) => s.hidratado)
   const treinoAtivo = useStore((s) => s.treinoAtivo)
 
   // Cada troca de aba começa do topo — nada pior que abrir uma aba no meio.
   useEffect(() => {
     window.scrollTo({ top: 0 })
   }, [aba])
+
+  // O armazenamento nativo é assíncrono: sem essa espera o app pisca a tela de
+  // boas-vindas para quem já é usuário, no meio segundo até o estado carregar.
+  if (!hidratado) return <TelaDeAbertura />
 
   if (!onboardingConcluido) return <Onboarding />
 
@@ -47,9 +52,14 @@ export default function App() {
       <button
         onClick={() => setCoachAberto(true)}
         aria-label="Abrir coach"
-        className="fixed bottom-24 right-4 z-30 flex h-12 w-12 items-center justify-center rounded-full
-                   bg-gradient-to-br from-lime to-lime-soft text-ink-950 shadow-lg shadow-lime/20
-                   transition active:scale-95"
+        className={cx(
+          'fixed right-4 z-30 flex h-12 w-12 items-center justify-center rounded-full',
+          'bg-gradient-to-br from-lime to-lime-soft text-ink-950 shadow-lg shadow-lime/20',
+          'transition-all active:scale-95',
+          // Durante o treino o botão "Concluir treino" fica fixo acima da
+          // navegação; o coach sobe para não cobri-lo.
+          aba === 'treino' && treinoAtivo ? 'bottom-44' : 'bottom-24',
+        )}
       >
         <MessageCircle size={21} />
       </button>
@@ -81,6 +91,25 @@ export default function App() {
 
       <CoachPainel aberto={coachAberto} aoFechar={() => setCoachAberto(false)} />
       <PopupConquista />
+    </div>
+  )
+}
+
+/** Ponte visual entre o splash nativo e o app carregado. */
+function TelaDeAbertura() {
+  return (
+    <div className="flex min-h-full items-center justify-center">
+      <svg width="56" height="56" viewBox="0 0 100 100" aria-label="Ápice" className="animate-pulse">
+        <path
+          d="M24 66 L50 29 L76 66"
+          fill="none"
+          stroke="#c6f24e"
+          strokeWidth="10.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <line x1="32" y1="78" x2="68" y2="78" stroke="#4ec3f2" strokeWidth="5.2" strokeLinecap="round" />
+      </svg>
     </div>
   )
 }

@@ -30,6 +30,7 @@ export function CoachPainel({ aberto, aoFechar }: { aberto: boolean; aoFechar: (
   const fimRef = useRef<HTMLDivElement>(null)
 
   const apiKey = useStore((s) => s.apiKey)
+  const modelo = useStore((s) => s.modelo)
   const mensagens = useStore((s) => s.coach)
   const addMensagem = useStore((s) => s.addMensagemCoach)
   const atualizarMensagem = useStore((s) => s.atualizarMensagemCoach)
@@ -60,10 +61,16 @@ export function CoachPainel({ aberto, aoFechar }: { aberto: boolean; aoFechar: (
           .map((m) => ({ role: m.papel, content: m.texto })),
       ]
       let acumulado = ''
-      await perguntarCoach(apiKey, historico, contexto, (delta) => {
-        acumulado += delta
-        atualizarMensagem(idResposta, acumulado)
-      })
+      await perguntarCoach(
+        apiKey,
+        historico,
+        contexto,
+        (delta) => {
+          acumulado += delta
+          atualizarMensagem(idResposta, acumulado)
+        },
+        modelo,
+      )
     } catch (e) {
       setErro(mensagemDeErro(e))
       atualizarMensagem(idResposta, '')
@@ -77,7 +84,7 @@ export function CoachPainel({ aberto, aoFechar }: { aberto: boolean; aoFechar: (
       <div className="flex min-h-[55vh] flex-col">
         {!apiKey && (
           <Aviso tom="info">
-            O coach precisa da sua chave da Claude API. Configure em <strong>Ajustes › Análise por foto</strong>.
+            O coach precisa da sua chave da Claude API. Configure em <strong>Ajustes › Conectar Claude</strong>.
           </Aviso>
         )}
 

@@ -5,6 +5,7 @@ import { SeletorExercicio } from '../components/SeletorExercicio'
 import { Aviso, Botao, Cartao, Chip, Estatistica, TituloSecao, Vazio } from '../components/ui'
 import { EQUIPAMENTOS, EXERCICIOS_POR_ID } from '../data/exercicios'
 import { classificarSerie, sugerirProgressao } from '../lib/forca'
+import { vibrar } from '../lib/nativo'
 import { ultimaSerieDe, useStore, volumeDoTreino } from '../lib/store'
 import type { ClassificacaoForca, Exercicio, ExercicioSessao } from '../types'
 
@@ -217,6 +218,7 @@ function BlocoExercicio({ sessao }: { sessao: ExercicioSessao }) {
     if (r <= 0) return
 
     addSerie(sessao.id, { peso: p, reps: r, aquecimento, concluida: true })
+    void vibrar(aquecimento ? 'leve' : 'medio')
 
     if (!aquecimento) {
       const cls = classificarSerie(sessao.exercicioId, { id: '', peso: p, reps: r, concluida: true }, perfil)
