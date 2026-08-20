@@ -143,12 +143,19 @@ export const fetchNativo: typeof fetch = async (entrada, init) => {
   })
 
   let corpo: unknown
-  if (typeof init?.body === 'string') {
+  const bruto = init?.body
+  if (typeof bruto === 'string') {
     try {
-      corpo = JSON.parse(init.body)
+      corpo = JSON.parse(bruto)
     } catch {
-      corpo = init.body
+      corpo = bruto
     }
+  } else if (bruto instanceof Uint8Array || bruto instanceof ArrayBuffer) {
+    corpo = new TextDecoder().decode(bruto as Uint8Array)
+  } else if (bruto != null) {
+    // Stream de corpo não tem como ser reenviado pela ponte nativa, e mandar
+    // a requisição sem corpo produziria um erro confuso lá na API.
+    throw new Error('Este tipo de requisição não pode sair pela camada nativa.')
   }
 
   const resposta = await CapacitorHttp.request({
@@ -163,14 +170,21 @@ export const fetchNativo: typeof fetch = async (entrada, init) => {
 
   const texto = typeof resposta.data === 'string' ? resposta.data : JSON.stringify(resposta.data ?? null)
 
-  return new Response(texto, {
+  // A camada nativa já descomprimiu e remontou o corpo. Repassar os cabeçalhos
+  // de transporte originais faria o navegador tentar descomprimir de novo, ou
+  // brigar com um content-length que não corresponde mais ao texto.
+  const TRANSPORTE = new Set(['content-encoding', 'content-length', 'transfer-encoding', 'connection'])
+  const cabecalhosResposta = new Headers()
+  for (const [chave, valor] of Object.entries(resposta.headers ?? {})) {
+    if (!TRANSPORTE.has(chave.toLowerCase())) cabecalhosResposta.set(chave, String(valor))
+  }
+
+  // 204/205/304 não podem carregar corpo — o construtor de Response lança.
+  const semCorpo = [204, 205, 304].includes(resposta.status)
+
+  return new Response(semCorpo ? null : texto, {
     status: resposta.status,
-    statusText: String(resposta.status),
-    headers: new Headers(
-      Object.fromEntries(
-        Object.entries(resposta.headers ?? {}).map(([k, v]) => [k, String(v)]),
-      ),
-    ),
+    headers: cabecalhosResposta,
   })
 }
 

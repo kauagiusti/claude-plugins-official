@@ -28,6 +28,7 @@ export function AnalisadorFoto({
   const [itens, setItens] = useState<ItemAlimento[]>([])
 
   const inputRef = useRef<HTMLInputElement>(null)
+  const inputGaleriaRef = useRef<HTMLInputElement>(null)
   const apiKey = useStore((s) => s.apiKey)
   const modelo = useStore((s) => s.modelo)
   const addRefeicao = useStore((s) => s.addRefeicao)
@@ -52,7 +53,9 @@ export function AnalisadorFoto({
   async function capturar(origem: 'camera' | 'galeria') {
     setErro(null)
     if (!ehNativo()) {
-      inputRef.current?.click()
+      // Na web, `capture` no input abre a câmera direto; para a galeria é
+      // preciso um input sem esse atributo.
+      ;(origem === 'camera' ? inputRef : inputGaleriaRef).current?.click()
       return
     }
     try {
@@ -211,6 +214,17 @@ export function AnalisadorFoto({
             type="file"
             accept="image/*"
             capture="environment"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              receberArquivos(e.target.files)
+              e.target.value = ''
+            }}
+          />
+          <input
+            ref={inputGaleriaRef}
+            type="file"
+            accept="image/*"
             multiple
             className="hidden"
             onChange={(e) => {

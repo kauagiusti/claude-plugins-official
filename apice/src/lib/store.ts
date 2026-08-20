@@ -423,6 +423,14 @@ export const useStore = create<Estado>()(
   ),
 )
 
+// Rede de segurança para a hidratação. Se o armazenamento nativo falhar em
+// ler, ou simplesmente não responder, `onRehydrateStorage` pode nunca marcar o
+// estado como hidratado — e aí o app fica preso na tela de abertura, sem erro
+// visível. Depois de 3 segundos ele abre de qualquer jeito, com o que tiver.
+setTimeout(() => {
+  if (!useStore.getState().hidratado) useStore.setState({ hidratado: true })
+}, 3000)
+
 // ---------------------------------------------------------------------------
 // Seletores — funções puras sobre o estado, fora do create para não recriarem
 // referências a cada render.

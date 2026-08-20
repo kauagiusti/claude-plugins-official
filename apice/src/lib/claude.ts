@@ -15,7 +15,7 @@ import { ehNativo, fetchNativo } from './nativo'
 // `criarCliente` por chamadas a um backend próprio que guarde a chave.
 // ---------------------------------------------------------------------------
 
-export type ModeloId = 'claude-opus-5' | 'claude-sonnet-5'
+export type ModeloId = 'claude-opus-5' | 'claude-sonnet-5' | 'claude-haiku-4-5'
 
 export const MODELO_PADRAO: ModeloId = 'claude-opus-5'
 
@@ -29,16 +29,37 @@ export const MODELOS: {
   {
     id: 'claude-opus-5',
     nome: 'Opus 5',
-    descricao: 'Melhor leitura de porção e de pratos misturados. Recomendado.',
-    custoPorAnalise: 0.03,
+    descricao: 'Melhor leitura de porção e de prato misturado. Recomendado.',
+    custoPorAnalise: 0.06,
   },
   {
     id: 'claude-sonnet-5',
     nome: 'Sonnet 5',
-    descricao: 'Mais rápido e mais barato; erra mais em prato cheio ou molho escondido.',
+    descricao: 'Quase tão bom, por metade do preço. Boa escolha para uso diário.',
+    custoPorAnalise: 0.037,
+  },
+  {
+    id: 'claude-haiku-4-5',
+    nome: 'Haiku 4.5',
+    descricao: 'O mais barato e rápido. Acerta o prato simples; erra porção e molho.',
     custoPorAnalise: 0.012,
   },
 ]
+
+/*
+ * Como as estimativas acima foram calculadas, para dar para refazer a conta
+ * quando o preço mudar:
+ *
+ *   entrada ≈ 2.200 tokens  (foto de 1024 px ≈ 1.500 + prompt ≈ 550 + contexto)
+ *   saída   ≈ 2.000 tokens  (JSON estruturado ≈ 700 + raciocínio ≈ 1.300)
+ *
+ *   Opus 5     US$ 5/MTok entrada + US$ 25/MTok saída → ~US$ 0,061
+ *   Sonnet 5   US$ 3/MTok + US$ 15/MTok               → ~US$ 0,037
+ *   Haiku 4.5  US$ 1/MTok + US$  5/MTok               → ~US$ 0,012
+ *
+ * São ordens de grandeza: prato com muitos itens gasta mais, prato simples
+ * gasta menos. O valor de verdade está no painel da Anthropic.
+ */
 
 export class SemChaveError extends Error {
   constructor() {
@@ -69,6 +90,32 @@ function criarCliente(apiKey: string, viaNativo = false): Anthropic {
     maxRetries: 2,
     ...(viaNativo && ehNativo() ? { fetch: fetchNativo } : {}),
   })
+}
+
+/**
+ * `fallbacks: 'default'` faz uma recusa de classificador ser reatendida por
+ * outro modelo — vale a pena ter. Mas é um recurso beta: se a conta não tiver
+ * acesso, a API devolve 400 e o recurso principal do app morre junto.
+ *
+ * Esta função tenta com o fallback e, se a rejeição for por causa dele,
+ * repete sem. Perde-se a rede de proteção, não a análise.
+ */
+async function comFallbackOpcional<T>(
+  executar: (extras: Record<string, unknown>) => Promise<T>,
+  podeRepetir: () => boolean = () => true,
+): Promise<T> {
+  try {
+    return await executar({
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+    })
+  } catch (e) {
+    const err = e as { status?: number; message?: string }
+    const rejeitouOBeta =
+      err?.status === 400 && /fallback|beta|unsupported|unrecognized/i.test(err?.message ?? '')
+    if (!rejeitouOBeta || !podeRepetir()) throw e
+    return executar({})
+  }
 }
 
 /** Extrai o texto concatenado dos blocos de texto da resposta. */
@@ -185,33 +232,34 @@ export async function analisarFoto(
     .filter(Boolean)
     .join('\n')
 
-  const resposta = await client.beta.messages.create({
-    model: modelo,
-    max_tokens: 10000,
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',
-    system: SISTEMA_NUTRICAO,
-    output_config: {
-      effort: 'medium',
-      format: { type: 'json_schema', schema: ESQUEMA_ANALISE as unknown as Record<string, unknown> },
-    },
-    messages: [
-      {
-        role: 'user',
-        content: [
-          ...imagens.map((img) => ({
-            type: 'image' as const,
-            source: {
-              type: 'base64' as const,
-              media_type: img.mediaType as 'image/jpeg',
-              data: img.base64,
-            },
-          })),
-          { type: 'text' as const, text: `Analise esta refeição.\n\n${contexto}` },
-        ],
+  const resposta = await comFallbackOpcional((extras) =>
+    client.beta.messages.create({
+      ...extras,
+      model: modelo,
+      max_tokens: 10000,
+      system: SISTEMA_NUTRICAO,
+      output_config: {
+        effort: 'medium',
+        format: { type: 'json_schema', schema: ESQUEMA_ANALISE as unknown as Record<string, unknown> },
       },
-    ],
-  })
+      messages: [
+        {
+          role: 'user',
+          content: [
+            ...imagens.map((img) => ({
+              type: 'image' as const,
+              source: {
+                type: 'base64' as const,
+                media_type: img.mediaType as 'image/jpeg',
+                data: img.base64,
+              },
+            })),
+            { type: 'text' as const, text: `Analise esta refeição.\n\n${contexto}` },
+          ],
+        },
+      ],
+    }),
+  )
 
   if (resposta.stop_reason === 'refusal') {
     throw new RecusaError(resposta.stop_details?.explanation ?? undefined)
@@ -265,8 +313,6 @@ export async function perguntarCoach(
   const parametros = {
     model: modelo,
     max_tokens: 4000,
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default' as const,
     system: [
       { type: 'text' as const, text: SISTEMA_COACH },
       { type: 'text' as const, text: `Contexto atual da pessoa:\n${contexto}` },
@@ -278,10 +324,23 @@ export async function perguntarCoach(
   // Streaming pela WebView é o caminho bom: o texto aparece aos poucos. Se a
   // WebView barrar a chamada (CORS, rede do app), refaz de uma vez só pela
   // camada nativa — o coach perde o efeito de digitação, não a resposta.
+  // Se o texto já começou a chegar, uma nova tentativa duplicaria o conteúdo
+  // no acumulador de quem chamou. A degradação só é segura antes do primeiro
+  // delta — na prática o 400 do beta acontece bem antes disso.
+  let jaEmitiu = false
+  const emitir = onDelta
+    ? (t: string) => {
+        jaEmitiu = true
+        onDelta(t)
+      }
+    : undefined
+
   try {
-    const stream = criarCliente(apiKey).beta.messages.stream(parametros)
-    if (onDelta) stream.on('text', onDelta)
-    const final = await stream.finalMessage()
+    const final = await comFallbackOpcional(async (extras) => {
+      const stream = criarCliente(apiKey).beta.messages.stream({ ...extras, ...parametros })
+      if (emitir) stream.on('text', emitir)
+      return stream.finalMessage()
+    }, () => !jaEmitiu)
     if (final.stop_reason === 'refusal') {
       throw new RecusaError(final.stop_details?.explanation ?? undefined)
     }
@@ -289,7 +348,9 @@ export async function perguntarCoach(
   } catch (e) {
     if (e instanceof RecusaError || !ehNativo() || !ehErroDeTransporte(e)) throw e
 
-    const resposta = await criarCliente(apiKey, true).beta.messages.create(parametros)
+    const resposta = await comFallbackOpcional((extras) =>
+      criarCliente(apiKey, true).beta.messages.create({ ...extras, ...parametros }),
+    )
     if (resposta.stop_reason === 'refusal') {
       throw new RecusaError(resposta.stop_details?.explanation ?? undefined)
     }
