@@ -94,7 +94,8 @@ npm run capturas     # capturas 1290×2796 para o App Store Connect
 
 O passo a passo completo — assinatura, manifesto de privacidade, questionário de dados, envio e o que costuma
 travar na revisão — está em **[`loja/README.md`](loja/README.md)**. Os textos da ficha, a política de privacidade
-e as notas para o revisor estão na mesma pasta.
+e as notas para o revisor estão na mesma pasta. Para cobrar pelo app, as contas de custo, margem e o caminho
+até a assinatura estão em **[`loja/monetizacao.md`](loja/monetizacao.md)**.
 
 No app nativo o Ápice usa câmera nativa, háptico ao registrar série e armazenamento em UserDefaults — o
 `localStorage` da WKWebView pode ser descartado pelo iOS sob pressão de espaço, o que para meses de histórico

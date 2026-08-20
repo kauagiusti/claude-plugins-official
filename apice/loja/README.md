@@ -188,6 +188,16 @@ Connect é o erro mais comum de primeira submissão.
 
 ---
 
+## Antes de cobrar por isso
+
+Publicar é uma coisa; ganhar dinheiro é outra, e a segunda tem um pré-requisito de
+arquitetura. Do jeito que o app está — cada usuário com a própria chave de API — não
+existe assinatura possível. As contas de custo por análise, margem por assinante,
+preço, planos e o passo a passo para chegar lá estão em
+[`monetizacao.md`](monetizacao.md).
+
+---
+
 ## Sobre uma versão Android
 
 O mesmo código roda: `npm install @capacitor/android && npx cap add android`. Muda o
