@@ -25,6 +25,11 @@ export interface Perfil {
   gorduraPorKg: number
   /** Sobrescreve as metas calculadas quando definido. */
   metasManuais?: Metas | null
+  /**
+   * Se a altura entra na comparação de força. Ausente conta como ligado; é um
+   * modelo mecânico, não dado de população, então dá para desligar.
+   */
+  ajustarPorAltura?: boolean
 }
 
 export interface Metas {
@@ -60,6 +65,68 @@ export interface ItemAlimento extends Macros {
   confianca?: number
 }
 
+// ------------------------- Produto embalado (código de barras) -------------
+
+/** Nutrientes por 100 g ou 100 ml. `null` significa "não informado", nunca zero. */
+export interface NutrientesPor100 {
+  kcal: number | null
+  proteina: number | null
+  carbo: number | null
+  gordura: number | null
+  gorduraSaturada: number | null
+  fibra: number | null
+  acucar: number | null
+  /** Em mg. */
+  sodio: number | null
+}
+
+export interface Produto {
+  /** EAN-13, EAN-8 ou UPC-A, como impresso na embalagem. */
+  codigo: string
+  nome: string
+  marca?: string
+  /** Conteúdo da embalagem, ex.: "395 g". */
+  embalagem?: string
+  /** Porção declarada pelo fabricante, em g ou ml. */
+  porcaoG?: number
+  porcaoDescrita?: string
+  liquido: boolean
+  por100: NutrientesPor100
+  ingredientes?: string
+  /** Grupo NOVA, 1 a 4. */
+  nova?: number
+  /** Códigos INS dos aditivos declarados. */
+  aditivos: string[]
+  imagemUrl?: string
+  /** Quando o registro foi atualizado pela última vez na base. */
+  atualizadoEm?: string
+  /** Endereço da ficha, para o usuário conferir ou corrigir. */
+  fonteUrl: string
+}
+
+export interface MarcadorAlto {
+  nutriente: 'Açúcar' | 'Gordura saturada' | 'Sódio'
+  valor: number
+  limite: number
+  unidade: string
+  /**
+   * `provavel` quando o dado disponível não é exatamente o que a norma mede —
+   * hoje só acontece com açúcar (total na base, adicionado na norma).
+   */
+  certeza: 'confirmado' | 'provavel'
+  nota?: string
+}
+
+export interface AvaliacaoProduto {
+  altos: MarcadorAlto[]
+  positivos: string[]
+  /** Nutrientes que a base não informou — ficam fora do julgamento. */
+  semDados: string[]
+  observacoes: string[]
+  /** "100 g" ou "100 ml". */
+  unidadeBase: string
+}
+
 export type TipoRefeicao = 'cafe' | 'lanche_manha' | 'almoco' | 'lanche_tarde' | 'jantar' | 'ceia' | 'pre' | 'pos'
 
 export interface Refeicao {
@@ -70,8 +137,14 @@ export interface Refeicao {
   titulo: string
   itens: ItemAlimento[]
   fotoDataUrl?: string
-  /** Origem dos dados: análise por foto, busca na tabela ou entrada manual. */
-  origem: 'foto' | 'tabela' | 'manual'
+  /**
+   * De onde vieram os números. Aparece na tela porque a confiabilidade de cada
+   * origem é diferente: rótulo lido por código de barras é declaração do
+   * fabricante; foto é estimativa.
+   */
+  origem: 'foto' | 'tabela' | 'manual' | 'codigo-barras'
+  /** Código de barras, quando a refeição veio de um produto embalado. */
+  codigoBarras?: string
   observacoes?: string
   recomendacao?: string
 }
@@ -201,6 +274,15 @@ export interface ClassificacaoForca {
   proximoNivel?: { nivel: NivelForca; faltamKg: number }
   /** true quando os padrões vêm de um lift de referência com coeficiente. */
   estimado: boolean
+  /** O que entrou na comparação, para a tela poder mostrar de onde saiu o número. */
+  ajustes: {
+    /** Multiplicador aplicado aos limiares pela idade. */
+    idade: number
+    /** Multiplicador aplicado aos limiares pela altura (1 quando desligado). */
+    altura: number
+    /** Altura típica de quem treina neste peso corporal, em cm. */
+    alturaReferenciaCm: number
+  }
 }
 
 export interface RecordePessoal {

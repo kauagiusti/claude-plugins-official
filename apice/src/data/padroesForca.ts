@@ -242,3 +242,121 @@ export function fatorIdade(idade: number): number {
   if (idade <= 70) return 0.74 - (idade - 60) * 0.013 // até 0.61
   return Math.max(0.4, 0.61 - (idade - 70) * 0.014)
 }
+
+// ---------------------------------------------------------------------------
+// Altura
+//
+// ATENÇÃO — a natureza deste ajuste é diferente da dos outros dois.
+//
+// Peso e sexo vêm das tabelas acima, que são distribuições observadas de cargas
+// reportadas. Idade vem dos coeficientes de categorias master, que também saem
+// de resultados de competição. Altura NÃO tem equivalente: não existe base
+// pública de padrões de força por altura, e nenhum sistema de pontuação em uso
+// (Wilks, DOTS, IPF GL) usa altura. Inventar uma tabela seria apresentar
+// chute com cara de dado.
+//
+// O que dá para fazer honestamente é um modelo mecânico, derivado e declarado:
+//
+//   A dois corpos de MESMA MASSA, o mais alto tem membros mais longos e mais
+//   finos. Sob semelhança geométrica, a área de secção transversal do músculo
+//   cai com 1/altura (o mesmo volume distribuído num comprimento maior), e a
+//   força que um músculo produz é proporcional a essa área. O braço de alavanca
+//   da carga cresce com a altura na mesma proporção do braço do músculo, então
+//   os dois se cancelam no torque. Sobra:
+//
+//       1RM esperado ∝ 1 / altura,   a peso corporal constante
+//
+// Corpos reais não são geometricamente semelhantes — proporções de membro,
+// distribuição de massa e comprimento de tronco variam demais para o expoente
+// cheio valer. Por isso o expoente é amortecido para 0,6 e o efeito é limitado
+// a ±8%: o suficiente para reconhecer a desvantagem de quem é alto e magro,
+// pequeno o bastante para não distorcer a comparação se o modelo estiver
+// otimista.
+//
+// A altura de referência por peso é a altura típica de quem treina naquele
+// peso. Quem está nela não recebe ajuste nenhum.
+// ---------------------------------------------------------------------------
+
+/** Expoente amortecido da relação 1RM ∝ 1/altura. */
+const EXPOENTE_ALTURA = 0.6
+
+/** Teto do ajuste, para os dois lados. */
+const LIMITE_ALTURA = 0.08
+
+/**
+ * Quanto cada levantamento responde à altura, de 0 (nada) a 1 (o modelo
+ * inteiro). A amplitude de movimento cresce com o comprimento do membro, mas
+ * não do mesmo jeito em todos:
+ *
+ * - agachamento: fêmur longo é desvantagem direta, sem compensação
+ * - supino e desenvolvimento: braço longo alonga o percurso da barra
+ * - barra-fixa e paralelas: mesmo efeito, atenuado por já serem relativos ao corpo
+ * - remada: percurso curto e tronco apoiado limitam o efeito
+ * - terra: braço longo ENCURTA o percurso e compensa boa parte da perna longa,
+ *   que é o motivo de o levantamento terra ser o lift onde altura menos pesa
+ */
+const SENSIBILIDADE_ALTURA: Record<LiftReferencia, number> = {
+  agachamento: 1,
+  supino: 0.9,
+  desenvolvimento: 0.9,
+  'barra-fixa': 0.8,
+  paralelas: 0.8,
+  remada: 0.6,
+  terra: 0.5,
+}
+
+/** Altura típica, em cm, de quem treina em cada peso corporal. */
+const ALTURA_REFERENCIA: Record<Sexo, [number, number][]> = {
+  M: [
+    [55, 162],
+    [65, 168],
+    [75, 174],
+    [85, 178],
+    [95, 182],
+    [105, 184],
+    [120, 187],
+  ],
+  F: [
+    [45, 152],
+    [55, 158],
+    [65, 163],
+    [75, 167],
+    [85, 170],
+    [95, 173],
+  ],
+}
+
+/** Altura esperada para um peso corporal, interpolada entre as linhas. */
+export function alturaReferencia(sexo: Sexo, pesoKg: number): number {
+  const linhas = ALTURA_REFERENCIA[sexo]
+  if (pesoKg <= linhas[0][0]) return linhas[0][1]
+  const ultima = linhas[linhas.length - 1]
+  if (pesoKg >= ultima[0]) return ultima[1]
+  for (let i = 0; i < linhas.length - 1; i++) {
+    const [pa, ha] = linhas[i]
+    const [pb, hb] = linhas[i + 1]
+    if (pesoKg >= pa && pesoKg <= pb) return ha + ((hb - ha) * (pesoKg - pa)) / (pb - pa)
+  }
+  return ultima[1]
+}
+
+/**
+ * Fator que multiplica os limiares de força. Abaixo de 1 para quem é mais alto
+ * que a referência do próprio peso — o padrão esperado dele é menor, então o
+ * mesmo 1RM vale mais. Acima de 1 para quem é mais baixo.
+ *
+ * Retorna exatamente 1 quando falta a altura, quando ela é implausível ou
+ * quando o levantamento não está na tabela de sensibilidade — na dúvida, não
+ * mexe no resultado.
+ */
+export function fatorAltura(lift: LiftReferencia, sexo: Sexo, pesoKg: number, alturaCm: number): number {
+  if (!Number.isFinite(alturaCm) || alturaCm < 120 || alturaCm > 230) return 1
+  if (!Number.isFinite(pesoKg) || pesoKg <= 0) return 1
+
+  const sensibilidade = SENSIBILIDADE_ALTURA[lift]
+  if (!sensibilidade) return 1
+
+  const referencia = alturaReferencia(sexo, pesoKg)
+  const bruto = Math.pow(referencia / alturaCm, EXPOENTE_ALTURA * sensibilidade)
+  return Math.min(1 + LIMITE_ALTURA, Math.max(1 - LIMITE_ALTURA, bruto))
+}

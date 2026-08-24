@@ -76,6 +76,8 @@ export function NivelSerie({
         </p>
       )}
 
+      <BaseDaComparacao cls={cls} />
+
       {(cls.estimado || (reps ?? 0) > REPS_CONFIAVEIS) && (
         <p className="text-[11px] leading-relaxed text-slate-500">
           {cls.estimado && 'Padrões convertidos a partir do levantamento de referência. '}
@@ -84,6 +86,28 @@ export function NivelSerie({
         </p>
       )}
     </div>
+  )
+}
+
+/**
+ * De onde saiu o padrão contra o qual a série foi medida. Sem isso o percentil
+ * vira número mágico — e ele é resultado de escolhas que dá para checar.
+ */
+function BaseDaComparacao({ cls }: { cls: ClassificacaoForca }) {
+  const partes: string[] = []
+  const pct = (f: number) => `${f > 1 ? '+' : '−'}${Math.abs((f - 1) * 100).toFixed(1)}%`
+
+  if (Math.abs(cls.ajustes.idade - 1) > 0.001) partes.push(`idade ${pct(cls.ajustes.idade)}`)
+  if (Math.abs(cls.ajustes.altura - 1) > 0.001) {
+    partes.push(`altura ${pct(cls.ajustes.altura)} (típica no seu peso: ${cls.ajustes.alturaReferenciaCm.toFixed(0)} cm)`)
+  }
+  if (partes.length === 0) return null
+
+  return (
+    <p className="text-[11px] leading-relaxed text-slate-500">
+      Padrão do seu peso e sexo, ajustado por {partes.join(' · ')}.
+      {Math.abs(cls.ajustes.altura - 1) > 0.001 && ' O de altura é modelo mecânico — dá para desligar em Ajustes.'}
+    </p>
   )
 }
 

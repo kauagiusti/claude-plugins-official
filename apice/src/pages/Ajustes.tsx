@@ -1,8 +1,8 @@
 import { Check, Download, Key, RotateCcw, Scale, Target, User } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { ConexaoClaude } from '../components/ConexaoClaude'
-import { Aviso, Botao, Campo, Cartao, Chip, Estatistica, Selecao, TituloSecao } from '../components/ui'
-
+import { Aviso, Botao, Campo, Cartao, Chip, Estatistica, Interruptor, Selecao, TituloSecao } from '../components/ui'
+import { alturaReferencia } from '../data/padroesForca'
 import { idadeDe } from '../lib/forca'
 import { calcularMetas, ROTULO_ATIVIDADE, ROTULO_OBJETIVO, tdee, tmb } from '../lib/nutricao'
 import { hojeISO, useStore } from '../lib/store'
@@ -92,10 +92,33 @@ export default function Ajustes() {
               onChange={(e) => setPerfil({ gorduraPct: e.target.value ? Number(e.target.value) : undefined })}
             />
           </div>
-          <p className="text-xs text-slate-500">
-            {idadeDe(perfil.nascimento)} anos — a idade entra na comparação de força, com os mesmos coeficientes
-            usados nas categorias master.
+          <p className="text-xs leading-relaxed text-slate-500">
+            {idadeDe(perfil.nascimento)} anos. Peso, sexo e idade entram na comparação de força: os dois primeiros
+            escolhem a tabela de padrões, a idade aplica os mesmos coeficientes usados nas categorias master.
           </p>
+
+          <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-3.5">
+            <Interruptor
+              ligado={perfil.ajustarPorAltura !== false}
+              onChange={(v) => setPerfil({ ajustarPorAltura: v })}
+              rotulo="Considerar altura na comparação"
+              descricao={
+                <>
+                  Comparado com a altura típica de quem treina no seu peso (
+                  {alturaReferencia(perfil.sexo, perfil.pesoKg).toFixed(0)} cm), ser mais alto é desvantagem
+                  mecânica: membro mais longo, percurso maior e secção muscular mais fina para a mesma massa. O
+                  ajuste vai no máximo a 8% e pesa mais no agachamento que no terra, onde braço longo compensa.
+                </>
+              }
+            />
+            <p className="mt-3 border-t border-white/[0.07] pt-3 text-[11px] leading-relaxed text-slate-500">
+              <strong className="font-semibold text-slate-400">Por que dá para desligar:</strong> peso, sexo e
+              idade vêm de dados observados — cargas reportadas e resultados de competição. Altura não: não existe
+              base pública de padrões de força por altura, e nenhum sistema de pontuação em uso (Wilks, DOTS,
+              IPF GL) usa altura. O ajuste do Ápice é um modelo mecânico declarado, não uma medição. Desligado, a
+              comparação usa só o que é observado.
+            </p>
+          </div>
         </Cartao>
       </section>
 

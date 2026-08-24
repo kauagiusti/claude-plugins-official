@@ -28,6 +28,8 @@ export default function App() {
   const hidratado = useStore((s) => s.hidratado)
   const treinoAtivo = useStore((s) => s.treinoAtivo)
 
+  const coachVisivel = useEsconderAoRolar()
+
   // Cada troca de aba começa do topo — nada pior que abrir uma aba no meio.
   useEffect(() => {
     window.scrollTo({ top: 0 })
@@ -59,7 +61,11 @@ export default function App() {
           // Durante o treino o botão "Concluir treino" fica fixo acima da
           // navegação; o coach sobe para não cobri-lo.
           aba === 'treino' && treinoAtivo ? 'bottom-44' : 'bottom-24',
+          // Botão flutuante cobre o conteúdo que passa por baixo dele. Some
+          // enquanto a pessoa rola para ler e volta quando ela para.
+          coachVisivel ? 'opacity-100' : 'pointer-events-none translate-y-3 opacity-0',
         )}
+        tabIndex={coachVisivel ? 0 : -1}
       >
         <MessageCircle size={21} />
       </button>
@@ -96,6 +102,39 @@ export default function App() {
 }
 
 /** Ponte visual entre o splash nativo e o app carregado. */
+/**
+ * Verdadeiro quando o botão flutuante pode aparecer: parado ou rolando para
+ * cima. Rolando para baixo ele some, porque é quando a pessoa está lendo o que
+ * fica embaixo dele.
+ */
+function useEsconderAoRolar(): boolean {
+  const [visivel, setVisivel] = useState(true)
+
+  useEffect(() => {
+    let anterior = window.scrollY
+    let ocioso: ReturnType<typeof setTimeout>
+
+    const aoRolar = () => {
+      const atual = window.scrollY
+      // Movimento curto é tremida de dedo, não intenção de rolar.
+      if (Math.abs(atual - anterior) > 12) {
+        setVisivel(atual < anterior || atual < 40)
+        anterior = atual
+      }
+      clearTimeout(ocioso)
+      ocioso = setTimeout(() => setVisivel(true), 700)
+    }
+
+    window.addEventListener('scroll', aoRolar, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', aoRolar)
+      clearTimeout(ocioso)
+    }
+  }, [])
+
+  return visivel
+}
+
 function TelaDeAbertura() {
   return (
     <div className="flex min-h-full items-center justify-center">

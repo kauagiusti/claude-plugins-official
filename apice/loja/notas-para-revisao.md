@@ -2,11 +2,19 @@
 
 Cole no campo **App Review Information › Notes** do App Store Connect.
 
-O ponto sensível desta submissão é que o recurso de destaque depende de uma chave de
-API que o usuário fornece. Se o revisor abrir o app, tocar em "Foto" e vir só um aviso
+O ponto sensível desta submissão é que a análise por foto depende de uma chave de API
+que o usuário fornece. Se o revisor abrir o app, tocar em "Foto" e vir só um aviso
 pedindo configuração, ele conclui que o app está incompleto e rejeita por
 **Guideline 2.1 — App Completeness**. As notas abaixo existem para evitar exatamente
 isso: forneça uma chave de teste.
+
+Ajuda que o **scanner de código de barras funciona sem chave nenhuma** — é o caminho
+mais curto para o revisor ver o app fazendo algo real logo de cara, e vale deixar isso
+explícito nas notas.
+
+> **Antes de enviar:** escaneie um produto seu, confirme que a ficha aparece e cole o
+> código dele nas notas, no lugar indicado. Um código que você testou vale mais do que
+> um sugerido — a base é colaborativa e a cobertura muda com o tempo.
 
 ---
 
@@ -18,6 +26,19 @@ O app é em português do Brasil.
 
 CONTA
 Não é necessário criar conta. Não há login, cadastro nem compras no app.
+
+COMO TESTAR O SCANNER DE PRODUTO (não precisa de chave nem de conta)
+1. Abra o app e conclua o onboarding (qualquer dado serve)
+2. Aba "Comida" > botão "Código"
+3. Aponte a câmera para o código de barras de qualquer produto embalado, ou
+   toque em "Digitar o código" e informe o número impresso na embalagem
+   (código já testado por nós: [COLE AQUI UM CÓDIGO QUE VOCÊ CONFERIU])
+4. O app consulta a base pública Open Food Facts e mostra a tabela
+   nutricional, os ingredientes e a avaliação pelos limiares da rotulagem
+   frontal brasileira (ANVISA, RDC 429/2020)
+
+Se o produto testado não estiver na base, o app informa isso claramente em vez
+de estimar.
 
 COMO TESTAR A ANÁLISE POR FOTO (recurso que usa IA)
 Este recurso usa a API da Anthropic (Claude) autenticada por uma chave que o

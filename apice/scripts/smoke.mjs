@@ -59,6 +59,33 @@ const estado = {
   version: 1,
 }
 
+/** Resposta no formato do Open Food Facts, com as armadilhas que ela tem. */
+const PRODUTO_FALSO = {
+  status: 1,
+  product: {
+    product_name: 'Biscoito recheado sabor chocolate',
+    brands: 'Marca Exemplo',
+    quantity: '140 g',
+    serving_quantity: '30',
+    serving_size: '30 g (3 unidades)',
+    ingredients_text_pt: 'Farinha de trigo, açúcar, gordura vegetal, cacau, xarope de glicose, sal.',
+    nova_group: 4,
+    additives_tags: ['en:e322', 'en:e500'],
+    last_modified_t: 1700000000,
+    categories_tags: ['en:biscuits'],
+    nutriments: {
+      'energy-kcal_100g': 480,
+      proteins_100g: 6,
+      carbohydrates_100g: 68,
+      sugars_100g: 34,
+      fat_100g: 20,
+      'saturated-fat_100g': 9.5,
+      fiber_100g: 2.1,
+      sodium_100g: 0.32, // gramas na base, 320 mg no rótulo
+    },
+  },
+}
+
 const checagens = []
 const conferir = (nome, ok) => {
   checagens.push({ nome, ok })
@@ -117,6 +144,46 @@ conferir('refeição pela tabela é salva', (await pagina.getByText('Whey protei
 await pagina.getByRole('button', { name: 'Foto' }).click()
 await pagina.waitForTimeout(400)
 conferir('analisador avisa quando falta a chave', (await pagina.getByText(/chave da Claude API/i).count()) > 0)
+await pagina.keyboard.press('Escape')
+await pagina.waitForTimeout(300)
+
+// --------------------------- Código de barras -------------------------------
+// A base de produtos é respondida por uma resposta fixa: o que se testa aqui é
+// a leitura do app, não a disponibilidade do Open Food Facts.
+await pagina.route('**/world.openfoodfacts.org/**', (rota) =>
+  rota.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PRODUTO_FALSO) }),
+)
+
+await pagina.getByRole('button', { name: 'Código' }).click()
+// Sem câmera no navegador headless, o app cai para a digitação — que é
+// justamente o caminho que precisa funcionar quando a câmera falha.
+await pagina.waitForTimeout(2500)
+conferir('scanner cai para digitação sem câmera', (await pagina.getByText(/Código de barras/i).count()) > 0)
+
+const campoCodigo = pagina.locator('input[inputmode="numeric"]').last()
+await campoCodigo.fill('7891000100104') // dígito verificador errado de propósito
+await pagina.waitForTimeout(300)
+conferir(
+  'código com dígito verificador errado é barrado',
+  await pagina.getByRole('button', { name: /Buscar/ }).first().isDisabled(),
+)
+
+await campoCodigo.fill('7891000100103')
+await pagina.getByRole('button', { name: /Buscar/ }).first().click()
+await pagina.waitForTimeout(900)
+const fichaProduto = await pagina.locator('body').innerText()
+conferir('produto é exibido com o nome da base', /Biscoito recheado/i.test(fichaProduto))
+conferir('marcador ALTO EM dispara acima do limite', /Alto em açúcar/i.test(fichaProduto))
+conferir('sódio abaixo do limite não vira marcador', !/Alto em sódio/i.test(fichaProduto))
+conferir('sódio é convertido de grama para miligrama', /320 mg/.test(fichaProduto))
+conferir('a procedência do dado aparece', /Open Food Facts/i.test(fichaProduto))
+
+await pagina.getByRole('button', { name: /Adicionar ao dia/ }).click()
+await pagina.waitForTimeout(600)
+conferir(
+  'produto escaneado entra no dia com a procedência',
+  (await pagina.getByText(/Rótulo do fabricante/i).count()) > 0,
+)
 
 // -------------------------------- Fechamento -------------------------------
 conferir('sem erros de console', erros.length === 0)

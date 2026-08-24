@@ -1,15 +1,29 @@
-import { Camera, ChevronLeft, ChevronRight, Plus, Search, Trash2, UtensilsCrossed } from 'lucide-react'
+import { Barcode, Camera, ChevronLeft, ChevronRight, Plus, Search, Trash2, UtensilsCrossed } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { AnalisadorFoto } from '../components/AnalisadorFoto'
 import { BuscaAlimento } from '../components/BuscaAlimento'
+import { EscanearProduto } from '../components/EscanearProduto'
 import { Anel, Aviso, Barra, Botao, Cartao, Estatistica, TituloSecao, Vazio } from '../components/ui'
 import { recomendacaoLocal, restante, ROTULO_REFEICAO, totaisRefeicao } from '../lib/nutricao'
 import { diasAtras, hojeISO, metasDe, refeicoesDoDia, totaisDoDia, useStore } from '../lib/store'
+
+/**
+ * De onde vieram os números de cada refeição. Fica visível na lista porque a
+ * confiabilidade não é a mesma: rótulo é declaração do fabricante, tabela é
+ * valor médio, foto é estimativa.
+ */
+const PROCEDENCIA: Record<string, string> = {
+  foto: 'Estimado a partir da foto',
+  'codigo-barras': 'Rótulo do fabricante',
+  tabela: 'Tabela de alimentos (valores médios)',
+  manual: 'Informado por você',
+}
 
 export default function Nutricao() {
   const [data, setData] = useState(hojeISO())
   const [fotoAberta, setFotoAberta] = useState(false)
   const [buscaAberta, setBuscaAberta] = useState(false)
+  const [scannerAberto, setScannerAberto] = useState(false)
   const [adicionarEm, setAdicionarEm] = useState<string | undefined>()
   const [expandida, setExpandida] = useState<string | null>(null)
 
@@ -88,9 +102,12 @@ export default function Nutricao() {
       </Cartao>
 
       {/* ------------------------------ Ações ------------------------------- */}
-      <div className="grid grid-cols-2 gap-3">
-        <Botao onClick={() => setFotoAberta(true)} className="py-3.5">
+      <div className="grid grid-cols-3 gap-2.5">
+        <Botao onClick={() => setFotoAberta(true)} className="flex-col gap-1 py-3">
           <Camera size={18} /> Foto
+        </Botao>
+        <Botao variante="secundario" onClick={() => setScannerAberto(true)} className="flex-col gap-1 py-3">
+          <Barcode size={18} /> Código
         </Botao>
         <Botao
           variante="secundario"
@@ -98,7 +115,7 @@ export default function Nutricao() {
             setAdicionarEm(undefined)
             setBuscaAberta(true)
           }}
-          className="py-3.5"
+          className="flex-col gap-1 py-3"
         >
           <Search size={18} /> Tabela
         </Botao>
@@ -150,6 +167,7 @@ export default function Nutricao() {
                         {refeicao.hora} · {ROTULO_REFEICAO[refeicao.tipo]} ·{' '}
                         {refeicao.itens.length === 1 ? '1 item' : `${refeicao.itens.length} itens`}
                       </p>
+                      <p className="truncate text-[10px] text-slate-600">{PROCEDENCIA[refeicao.origem]}</p>
                       <p className="mt-0.5 text-[11px] tabular-nums text-slate-400">
                         P {Math.round(t.proteina)}g · C {Math.round(t.carbo)}g · G {Math.round(t.gordura)}g
                       </p>
@@ -224,6 +242,7 @@ export default function Nutricao() {
       </div>
 
       <AnalisadorFoto aberto={fotoAberta} aoFechar={() => setFotoAberta(false)} data={data} />
+      <EscanearProduto aberto={scannerAberto} aoFechar={() => setScannerAberto(false)} data={data} />
       <BuscaAlimento
         aberto={buscaAberta}
         aoFechar={() => setBuscaAberta(false)}

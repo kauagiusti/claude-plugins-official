@@ -94,7 +94,10 @@ interface Estado {
   registrarPeso: (peso: number, data?: string) => void
 
   // --- nutrição
-  addRefeicao: (r: Omit<Refeicao, 'id'>) => string
+  /** Os itens entram sem id — quem gera é o store, logo abaixo. */
+  addRefeicao: (
+    r: Omit<Refeicao, 'id' | 'itens'> & { itens: (Omit<ItemAlimento, 'id'> & { id?: string })[] },
+  ) => string
   removerRefeicao: (id: string) => void
   atualizarItem: (refeicaoId: string, itemId: string, mudanca: Partial<ItemAlimento>) => void
   removerItem: (refeicaoId: string, itemId: string) => void
@@ -292,6 +295,8 @@ export const useStore = create<Estado>()(
                 pesoCorporal: s.perfil.pesoKg,
                 sexo: s.perfil.sexo,
                 idade: idadeDe(s.perfil.nascimento),
+                alturaCm: s.perfil.alturaCm,
+                ajustarPorAltura: s.perfil.ajustarPorAltura,
               })
             : null
 
@@ -486,6 +491,8 @@ export function recordes(s: EstadoLeitura): Record<string, RecordePessoal> {
         pesoCorporal: s.perfil.pesoKg,
         sexo: s.perfil.sexo,
         idade,
+        alturaCm: s.perfil.alturaCm,
+        ajustarPorAltura: s.perfil.ajustarPorAltura,
       })
       mapa[sessao.exercicioId] = {
         exercicioId: sessao.exercicioId,

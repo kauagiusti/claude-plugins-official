@@ -1,6 +1,6 @@
 # Política de Privacidade — Ápice
 
-**Última atualização:** 17 de agosto de 2026
+**Última atualização:** 24 de agosto de 2026
 
 > Substitua `[SEU E-MAIL]` e `[SEU NOME OU EMPRESA]` antes de publicar, e hospede
 > esta página numa URL pública — o App Store Connect exige o endereço.
@@ -29,11 +29,25 @@ Você pode exportar seus dados em JSON a qualquer momento, em Ajustes › Dados.
 
 ## Quando algo sai do aparelho
 
-Existe **uma única** situação: quando você usa a análise de refeição por foto ou
-conversa com o coach.
+São **duas** situações, e as duas partem de uma ação sua.
 
-Nesses casos, o app envia diretamente para a API da Anthropic (`api.anthropic.com`),
-por conexão criptografada:
+### 1. Escanear um produto
+
+Ao ler um código de barras, o app consulta o **Open Food Facts**
+(`world.openfoodfacts.org`), base pública e aberta de produtos embalados, para obter a
+tabela nutricional, a lista de ingredientes e a classificação do produto.
+
+O que é enviado: **o número do código de barras, e nada mais.** Nenhum dado seu
+acompanha a consulta — nem perfil, nem histórico, nem identificador. A imagem da
+câmera é processada no próprio aparelho e nunca é transmitida.
+
+Essa consulta funciona sem chave de API e sem cadastro. A política do Open Food Facts
+está em https://world.openfoodfacts.org/privacy
+
+### 2. Análise por foto e coach
+
+Aqui o app envia diretamente para a API da Anthropic (`api.anthropic.com`), por
+conexão criptografada:
 
 - **Na análise por foto:** a foto da refeição e os números do seu dia (metas de
   calorias e macros, e o quanto você já consumiu), para que a estimativa considere
@@ -48,9 +62,10 @@ tem acesso a essas fotos, a essas conversas nem a esses números.
 O uso desses dados pela Anthropic é regido pela política de privacidade e pelos termos
 comerciais dela: https://www.anthropic.com/legal/privacy
 
-Se você nunca configurar uma chave de API, **nenhuma informação sai do aparelho em
-nenhuma hipótese**. O restante do app — tabela de alimentos, registro de treino,
-comparação de força, gráficos e conquistas — funciona integralmente offline.
+Se você nunca configurar uma chave de API, o app nunca fala com a Anthropic. Fora as
+duas situações acima, nada sai do aparelho. O restante — tabela de alimentos, registro
+de treino, comparação de força, avaliação de rótulo, gráficos e conquistas — funciona
+integralmente offline.
 
 ## Sua chave de API
 

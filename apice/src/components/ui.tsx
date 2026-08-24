@@ -138,6 +138,45 @@ export function Chip({
   )
 }
 
+export function Interruptor({
+  ligado,
+  onChange,
+  rotulo,
+  descricao,
+}: {
+  ligado: boolean
+  onChange: (v: boolean) => void
+  rotulo: string
+  descricao?: ReactNode
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-[15px] font-medium text-slate-100">{rotulo}</p>
+        {descricao && <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{descricao}</p>}
+      </div>
+      <button
+        role="switch"
+        aria-checked={ligado}
+        aria-label={rotulo}
+        onClick={() => onChange(!ligado)}
+        className={cx(
+          'mt-0.5 h-6 w-11 shrink-0 rounded-full border transition',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime/40',
+          ligado ? 'border-lime/50 bg-lime/70' : 'border-white/10 bg-white/[0.07]',
+        )}
+      >
+        <span
+          className={cx(
+            'block h-4 w-4 rounded-full bg-white transition-transform',
+            ligado ? 'translate-x-[26px]' : 'translate-x-[3px]',
+          )}
+        />
+      </button>
+    </div>
+  )
+}
+
 export function Etiqueta({ children, cor }: { children: ReactNode; cor: string }) {
   return (
     <span

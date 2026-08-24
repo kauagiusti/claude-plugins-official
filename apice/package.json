@@ -13,7 +13,9 @@
     "sync": "npm run build && npx cap sync ios",
     "ios": "npm run sync && npx cap open ios",
     "capturas": "node scripts/capturas-loja.mjs",
-    "site": "node scripts/site-unico.mjs"
+    "site": "node scripts/site-unico.mjs",
+    "test": "node --experimental-strip-types --import ./scripts/resolucao-ts.mjs --test scripts/testes.mts",
+    "privacidade": "node scripts/privacidade-html.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",
@@ -25,6 +27,7 @@
     "@capacitor/preferences": "^6.0.4",
     "@capacitor/splash-screen": "^6.0.4",
     "@capacitor/status-bar": "^6.0.3",
+    "@zxing/library": "^0.21.3",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

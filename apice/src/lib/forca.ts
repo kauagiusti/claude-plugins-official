@@ -1,6 +1,8 @@
 import { EXERCICIOS_POR_ID } from '../data/exercicios'
 import {
+  alturaReferencia,
   CORES_NIVEL,
+  fatorAltura,
   fatorIdade,
   limiaresPorPeso,
   NIVEIS,
@@ -89,6 +91,10 @@ export interface EntradaClassificacao {
   pesoCorporal: number
   sexo: Sexo
   idade: number
+  /** Altura em cm. Ausente ou implausível = sem ajuste de altura. */
+  alturaCm?: number
+  /** Desliga o ajuste de altura sem apagar a altura do perfil. */
+  ajustarPorAltura?: boolean
 }
 
 /**
@@ -108,10 +114,14 @@ export function classificar(e: EntradaClassificacao): ClassificacaoForca | null 
 
   const base = limiaresPorPeso(ex.ref.lift, e.sexo, e.pesoCorporal)
   const fi = fatorIdade(e.idade)
+  const fa =
+    e.ajustarPorAltura === false
+      ? 1
+      : fatorAltura(ex.ref.lift, e.sexo, e.pesoCorporal, e.alturaCm ?? 0)
 
-  // Limiares ajustados pela idade, na escala do lift de referência…
+  // Limiares ajustados por idade e altura, na escala do lift de referência…
   const ajustados = Object.fromEntries(
-    NIVEIS.map((n) => [n, base[n] * fi]),
+    NIVEIS.map((n) => [n, base[n] * fi * fa]),
   ) as Record<NivelForca, number>
 
   // …e convertidos para a escala do exercício efetivamente executado.
@@ -139,6 +149,11 @@ export function classificar(e: EntradaClassificacao): ClassificacaoForca | null 
     limiares: limiaresExercicio,
     proximoNivel,
     estimado: ex.ref.coef !== 1,
+    ajustes: {
+      idade: fi,
+      altura: fa,
+      alturaReferenciaCm: alturaReferencia(e.sexo, e.pesoCorporal),
+    },
   }
 }
 
@@ -169,6 +184,8 @@ export function classificarSerie(
     pesoCorporal: perfil.pesoKg,
     sexo: perfil.sexo,
     idade: idadeDe(perfil.nascimento),
+    alturaCm: perfil.alturaCm,
+    ajustarPorAltura: perfil.ajustarPorAltura,
   })
 }
 

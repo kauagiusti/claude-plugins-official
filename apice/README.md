@@ -1,7 +1,7 @@
 # Ápice
 
-App de nutrição e treino. Fotografe a refeição e receba kcal e macros na hora; registre a série e veja onde sua
-carga está em relação a quem treina — por peso, sexo e idade.
+App de nutrição e treino. Fotografe a refeição ou escaneie a embalagem e receba kcal, macros e a avaliação do
+rótulo; registre a série e veja onde sua carga está em relação a quem treina — por peso, sexo, idade e altura.
 
 Roda como app nativo no iPhone (projeto iOS pronto em `ios/`) e como PWA no navegador. Todos os dados ficam no
 aparelho — sem conta, sem servidor.
@@ -17,6 +17,10 @@ aparelho — sem conta, sem servidor.
   carboidrato, gordura, fibra, sódio e açúcar por item — com um grau de confiança por alimento.
 - **Sempre editável.** Ajustar a quantidade reescala os macros do item. A estimativa é ponto de partida, não
   veredito.
+- **Código de barras.** Aponte a câmera para a embalagem e o app busca o produto no Open Food Facts: tabela
+  nutricional, lista de ingredientes, aditivos e classificação NOVA. A avaliação usa os limiares reais da
+  rotulagem frontal brasileira (ANVISA, RDC 429/2020): açúcar, gordura saturada e sódio acima do limite viram
+  marcador "ALTO EM", com o número e o limite lado a lado. Roda sem chave de API.
 - **Tabela de alimentos** com 124 itens brasileiros (base TACO e rótulos usuais) para registrar sem foto, com
   porções caseiras — "1 concha", "1 escumadeira", "1 filé médio".
 - **Totais do dia** contra metas calculadas a partir do seu gasto energético (Mifflin-St Jeor, ou Katch-McArdle
@@ -28,9 +32,9 @@ aparelho — sem conta, sem servidor.
 
 - **206 exercícios** cobrindo barra, halteres, polia, máquina, Smith, peso corporal, kettlebell, elástico e
   cardio, com grupo muscular, músculos secundários e dicas de execução.
-- **Comparação mundial a cada série.** Ao registrar, o app calcula o 1RM estimado e mostra nível
-  (Iniciante → Elite), percentil na população treinada, múltiplo do peso corporal, quanto falta para o próximo
-  nível e a régua completa dos cinco níveis.
+- **Comparação a cada série.** Ao registrar, o app calcula o 1RM estimado e mostra nível (Iniciante → Elite),
+  percentil na população treinada, múltiplo do peso corporal, quanto falta para o próximo nível e a régua
+  completa dos cinco níveis. Peso, sexo, idade e altura entram na conta — e a tela diz quanto cada um mexeu.
 - **Progressão sugerida** por dupla progressão, a partir do seu último registro no exercício.
 - **Ranking geral**, recordes por exercício, volume semanal e 26 conquistas.
 
@@ -55,13 +59,15 @@ Build e conferência:
 npm run build        # gera dist/
 npm run preview      # serve o build em :4173
 npm run typecheck
-npm run smoke        # smoke test em navegador real (precisa do preview no ar)
+npm test             # testes das partes que decidem números
+npm run smoke        # 15 checagens em navegador real (precisa do preview no ar)
 
 npm run site         # o app inteiro num único HTML (dist-site/apice.html)
 
 npm run sync         # leva o build para o projeto iOS
 npm run ios          # sync + abre o Xcode (só no Mac)
 npm run capturas     # capturas da App Store, no tamanho exigido
+npm run privacidade  # regera loja/privacidade.html a partir do .md
 ```
 
 ### Conectar o Claude
@@ -139,6 +145,21 @@ carga crua da variação sob o nome do levantamento base.
 peso corporal, interpolados linearmente entre as linhas. A idade aplica um fator no estilo dos coeficientes de
 categorias master: pico entre 20 e 30 anos, queda progressiva depois.
 
+**4b. Altura — e por que ela é diferente das outras três.** Peso, sexo e idade saem de dados observados: cargas
+reportadas e resultados de competição. Altura não tem equivalente. Não existe base pública de padrões de força
+por altura, e nenhum sistema de pontuação em uso — Wilks, DOTS, IPF GL — usa altura. Montar uma tabela seria
+apresentar chute com cara de dado.
+
+O que dá para fazer honestamente é um modelo mecânico, derivado à vista. A dois corpos de mesma massa, o mais
+alto tem membros mais longos e mais finos: a secção transversal do músculo cai com 1/altura, e como o braço de
+alavanca da carga e o do músculo crescem juntos, eles se cancelam no torque. Sobra `1RM esperado ∝ 1/altura`, a
+peso constante. Corpos reais não são geometricamente semelhantes, então o expoente é amortecido para 0,6 e o
+efeito é limitado a ±8%. Cada levantamento responde diferente: agachamento sente inteiro, terra sente metade —
+braço longo encurta o percurso e compensa a perna longa.
+
+O ajuste aparece na tela toda vez que muda alguma coisa ("altura −7,2%, típica no seu peso: 174 cm") e **tem
+interruptor em Ajustes**. Desligado, a comparação usa só o que é observado.
+
 **5. Percentil.** Os limiares ancoram em percentis (Iniciante ≈ 5, Novato ≈ 20, Intermediário ≈ 50, Avançado ≈ 80,
 Elite ≈ 95) e o valor entre eles é interpolado; fora da faixa, satura suavemente.
 
@@ -146,6 +167,39 @@ Elite ≈ 95) e o valor entre eles é interpolado; fora da faixa, satura suaveme
 natureza dos grandes bancos públicos de levantamento. Não é medição de laboratório nem amostra da população
 geral: quem registra carga em app já é, em média, mais forte que a média. Trate como régua de acompanhamento e
 motivação, não como dado científico.
+
+---
+
+## De onde vem cada número
+
+A regra do projeto: **nada é apresentado sem procedência, e lacuna não é preenchida com estimativa silenciosa.**
+
+| O que aparece na tela | De onde vem | O que isso vale |
+|---|---|---|
+| Macros de produto embalado | Open Food Facts, cadastrado da embalagem | Declaração do fabricante, transcrita por colaborador |
+| Marcadores "ALTO EM" | ANVISA, RDC 429/2020 e IN 75/2020 | Limiar legal, número exato, calculado no aparelho |
+| "Fonte de proteína", "alto em fibras" | ANVISA, RDC 54/2012 | Critério declarado na tela, não alegação de rótulo |
+| Grupo NOVA | Guia Alimentar / Open Food Facts | Grau de processamento, não composição |
+| Macros da tabela de alimentos | TACO e rótulos usuais | Valor médio — produto específico pede o rótulo |
+| Macros por foto | Estimativa do Claude | Chute informado, com confiança por item e sempre editável |
+| Padrões de força por peso, sexo, idade | Cargas reportadas e coeficientes master | Referência de população treinada |
+| Ajuste por altura | Modelo mecânico do próprio app | Derivação declarada, ±8%, desligável |
+
+Três consequências práticas no código:
+
+- **Ausente nunca vira zero.** Nutriente que a base não informa entra como `null`, fica fora da avaliação e é
+  listado na tela. Um produto sem sódio declarado não é um produto sem sódio.
+- **A avaliação de rótulo não passa por modelo de linguagem.** Os limiares são norma publicada; trocar uma regra
+  verificável por um palpite bem escrito seria perder o que interessa.
+- **Leitura de código de barras é conferida antes de virar consulta.** O dígito verificador do EAN é validado no
+  aparelho, então "não encontrei" quer dizer que o produto não está na base — não que a câmera leu errado.
+
+### O que é testado
+
+`npm test` roda 24 verificações sobre as partes que erram em silêncio: conversão de sódio de grama para
+miligrama, energia em kJ virando kcal, ausência virando `null`, limiar de líquido contra o de sólido, açúcar de
+fruta não sendo acusado de açúcar adicionado, dígito verificador contra códigos EAN publicados, e o fator de
+altura respeitando o teto e a direção. São os erros que passariam despercebidos numa olhada na tela.
 
 ---
 
@@ -159,18 +213,20 @@ src/
 │   └── alimentos.ts        124 alimentos por 100 g + porções caseiras
 ├── lib/
 │   ├── claude.ts           Claude API: análise de foto (saída estruturada) e coach (streaming)
+│   ├── produtos.ts         código de barras: validação, Open Food Facts e leitura da resposta
+│   ├── rotulo.ts           avaliação do produto pelos limiares da ANVISA (determinística)
 │   ├── forca.ts            1RM, carga do sistema, nível, percentil, progressão
 │   ├── nutricao.ts         TMB/TDEE, metas, totais, recomendação local
 │   ├── gamificacao.ts      XP, níveis, streak, 26 conquistas
 │   ├── store.ts            estado (zustand + persist) e seletores
 │   ├── imagem.ts           redimensionamento antes do envio
 │   └── nativo.ts           câmera, armazenamento, háptico e HTTP nativo (Capacitor)
-├── components/             UI, analisador de foto, conexão Claude, gráficos, coach
+├── components/             UI, analisador de foto, scanner, conexão Claude, gráficos, coach
 └── pages/                  Hoje · Nutrição · Treino · Ranking · Ajustes · Onboarding
 
 ios/                        projeto Xcode (Capacitor) — abra com `npm run ios`
 loja/                       ficha da App Store, privacidade, notas de revisão, guia
-scripts/                    smoke test e gerador de capturas da loja
+scripts/                    testes, smoke test, capturas da loja, build de página única
 ```
 
 **Decisões que valem saber:**
@@ -192,7 +248,10 @@ scripts/                    smoke test e gerador de capturas da loja
 
 - As estimativas por foto erram — molho escondido, óleo de fritura e o que está embaixo da superfície são
   invisíveis. Confira as quantidades antes de salvar; é para isso que tudo é editável.
-- A tabela de alimentos usa valores médios. Produto industrializado específico: use o rótulo.
+- A tabela de alimentos usa valores médios. Produto industrializado específico: escaneie o código de barras.
+- O Open Food Facts é colaborativo: pode não ter o produto, ter campo faltando ou valor desatualizado. O app
+  mostra a data do registro e o link da ficha, e deixa tudo editável antes de salvar — mas confira a embalagem
+  quando o número importar.
 - Percentis de força são referência de população treinada, não medição clínica.
 - Ápice não é ferramenta de saúde. Condição clínica, dieta terapêutica, lesão ou dor persistente pedem
   profissional habilitado.
