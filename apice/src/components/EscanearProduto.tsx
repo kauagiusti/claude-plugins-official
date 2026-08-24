@@ -210,6 +210,13 @@ export function EscanearProduto({
 
         {etapa === 'manual' && (
           <>
+            {import.meta.env.VITE_PREVIEW_SANDBOX && (
+              <Aviso tom="info">
+                <strong className="font-semibold">Versão de demonstração.</strong> O sandbox bloqueia câmera e
+                chamadas para fora do domínio, então a leitura e a consulta à base de produtos não funcionam
+                aqui. Num host próprio ou no iPhone, funcionam — e sem precisar de chave de API.
+              </Aviso>
+            )}
             {erro && <Aviso tom="atencao">{erro}</Aviso>}
             <Campo
               rotulo="Código de barras"
