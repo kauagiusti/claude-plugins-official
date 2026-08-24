@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { NivelSerie } from '../components/NivelSerie'
 import { SeletorExercicio } from '../components/SeletorExercicio'
 import { Aviso, Botao, Cartao, Chip, Estatistica, TituloSecao, Vazio } from '../components/ui'
+import { FiguraExercicio } from '../components/FiguraExercicio'
 import { EQUIPAMENTOS, EXERCICIOS_POR_ID } from '../data/exercicios'
 import { classificarSerie, sugerirProgressao } from '../lib/forca'
 import { vibrar } from '../lib/nativo'
@@ -232,7 +233,12 @@ function BlocoExercicio({ sessao }: { sessao: ExercicioSessao }) {
   return (
     <Cartao className="space-y-3">
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
+        <FiguraExercicio
+          exercicio={ex}
+          tamanho={52}
+          className="shrink-0 rounded-xl bg-white/[0.04] p-1 text-slate-300"
+        />
+        <div className="min-w-0 flex-1">
           <p className="font-semibold leading-tight">{ex.nome}</p>
           <p className="mt-0.5 text-[11px] text-slate-500">
             {ex.grupo} · {EQUIPAMENTOS.find((e) => e.id === ex.equipamento)?.nome}

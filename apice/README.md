@@ -32,6 +32,8 @@ aparelho — sem conta, sem servidor.
 
 - **206 exercícios** cobrindo barra, halteres, polia, máquina, Smith, peso corporal, kettlebell, elástico e
   cardio, com grupo muscular, músculos secundários e dicas de execução.
+- **Desenho de cada exercício** ao lado do nome, na busca, no treino em andamento e no ranking — dá para achar o
+  movimento pela figura antes de ler o nome.
 - **Comparação a cada série.** Ao registrar, o app calcula o 1RM estimado e mostra nível (Iniciante → Elite),
   percentil na população treinada, múltiplo do peso corporal, quanto falta para o próximo nível e a régua
   completa dos cinco níveis. Peso, sexo, idade e altura entram na conta — e a tela diz quanto cada um mexeu.
@@ -163,6 +165,13 @@ interruptor em Ajustes**. Desligado, a comparação usa só o que é observado.
 **5. Percentil.** Os limiares ancoram em percentis (Iniciante ≈ 5, Novato ≈ 20, Intermediário ≈ 50, Avançado ≈ 80,
 Elite ≈ 95) e o valor entre eles é interpolado; fora da faixa, satura suavemente.
 
+**Os desenhos.** Cada exercício mostra um boneco de traço de perfil, montado em duas partes: a **pose**, que é um
+conjunto de articulações, e o **equipamento**, desenhado depois na posição da mão. São 36 poses para 206
+exercícios porque o que muda entre supino com barra, com halter, no Smith e na máquina é o equipamento, não o
+movimento. Em desenvolvimento, `/?figuras=1` mostra os 36 lado a lado — desenho se confere olhando, e os testes
+garantem que todo exercício chega a uma pose, que nenhuma pose fica órfã e que os movimentos que se confundem
+(rosca × rosca de punho, remada × remada alta, agachamento × búlgaro) não compartilham figura.
+
 **O que isso é e o que não é.** São referências de população treinada que reporta as próprias cargas — a mesma
 natureza dos grandes bancos públicos de levantamento. Não é medição de laboratório nem amostra da população
 geral: quem registra carga em app já é, em média, mais forte que a média. Trate como régua de acompanhamento e
@@ -215,6 +224,7 @@ src/
 │   ├── claude.ts           Claude API: análise de foto (saída estruturada) e coach (streaming)
 │   ├── produtos.ts         código de barras: validação, Open Food Facts e leitura da resposta
 │   ├── rotulo.ts           avaliação do produto pelos limiares da ANVISA (determinística)
+│   ├── figuras.ts          qual desenho representa cada exercício + coordenadas das poses
 │   ├── forca.ts            1RM, carga do sistema, nível, percentil, progressão
 │   ├── nutricao.ts         TMB/TDEE, metas, totais, recomendação local
 │   ├── gamificacao.ts      XP, níveis, streak, 26 conquistas

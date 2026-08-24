@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
+import FolhaFiguras from './FolhaFiguras'
 import './index.css'
 import { configurarNativo, migrarParaNativo } from './lib/nativo'
 
@@ -15,7 +16,14 @@ migrarParaNativo('apice-v1')
   .finally(() => {
     ReactDOM.createRoot(document.getElementById('root')!).render(
       <React.StrictMode>
-        <App />
+        {/* Folha de contato dos desenhos, só em desenvolvimento: boneco de
+            traço se confere olhando os 36 lado a lado, não lendo coordenada.
+            `npm run dev` e abra /?figuras=1. */}
+        {import.meta.env.DEV && new URLSearchParams(location.search).has('figuras') ? (
+          <FolhaFiguras />
+        ) : (
+          <App />
+        )}
       </React.StrictMode>,
     )
     void configurarNativo()

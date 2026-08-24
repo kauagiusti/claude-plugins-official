@@ -21,6 +21,8 @@ import {
   normalizarResposta,
 } from '../src/lib/produtos.ts'
 import { avaliarProduto, temAcucarAdicionado } from '../src/lib/rotulo.ts'
+import { EXERCICIOS } from '../src/data/exercicios.ts'
+import { POSES, poseDoExercicio } from '../src/lib/figuras.ts'
 
 // ---------------------------------------------------------------------------
 // Código de barras
@@ -269,4 +271,67 @@ test('fator de idade é 1 no pico e cai depois', () => {
   assert.equal(fatorIdade(25), 1)
   assert.ok(fatorIdade(45) < fatorIdade(35))
   assert.ok(fatorIdade(70) > 0.4)
+})
+
+// ---------------------------------------------------------------------------
+// Figuras dos exercícios
+// ---------------------------------------------------------------------------
+
+test('todo exercício chega numa pose que existe', () => {
+  const semPose = EXERCICIOS.filter((e) => !POSES[poseDoExercicio(e)])
+  assert.deepEqual(semPose.map((e) => e.id), [])
+})
+
+test('nenhuma pose fica órfã', () => {
+  const usadas = new Set(EXERCICIOS.map((e) => poseDoExercicio(e)))
+  const orfas = Object.keys(POSES).filter((p) => !usadas.has(p as keyof typeof POSES))
+  assert.deepEqual(orfas, [], 'pose desenhada que nenhum exercício alcança')
+})
+
+test('nenhuma articulação sai do quadro de 48×48', () => {
+  const fora: string[] = []
+  for (const [nome, pose] of Object.entries(POSES)) {
+    for (const [junta, valor] of Object.entries(pose)) {
+      if (!Array.isArray(valor) || valor.length !== 2 || typeof valor[0] !== 'number') continue
+      const [x, y] = valor as [number, number]
+      if (x < 2 || x > 46 || y < 2 || y > 46) fora.push(`${nome}.${junta} = ${x},${y}`)
+    }
+  }
+  assert.deepEqual(fora, [])
+})
+
+test('os movimentos que mais se confundem caem em poses diferentes', () => {
+  // Um erro de ordem nas regras junta estes pares, e o desenho passa a mentir.
+  const par = (a: string, b: string) => {
+    const pa = poseDoExercicio(EXERCICIOS.find((e) => e.id === a)!)
+    const pb = poseDoExercicio(EXERCICIOS.find((e) => e.id === b)!)
+    assert.notEqual(pa, pb, `${a} e ${b} não podem compartilhar o desenho`)
+  }
+  par('rosca-direta-barra', 'rosca-punho')
+  par('remada-curvada', 'remada-alta')
+  par('triceps-testa', 'triceps-corda')
+  par('triceps-frances', 'triceps-corda')
+  par('agachamento-livre', 'agachamento-bulgaro') // afundo, não agachamento
+  par('flexao', 'flexora-em-pe')
+  par('elevacao-pelvica', 'elevacao-pernas-barra')
+})
+
+test('cada exercício de referência mostra o desenho do próprio movimento', () => {
+  const espera: [string, string][] = [
+    ['supino-reto-barra', 'supino'],
+    ['supino-maquina', 'supino'],
+    ['agachamento-hack', 'agachamento'],
+    ['leg-press-unilateral', 'leg-press'],
+    ['barra-fixa-pronada', 'puxada'],
+    ['terra-sumo', 'terra'],
+    ['stiff', 'terra'],
+    ['peck-deck', 'crucifixo'],
+    ['face-pull', 'crucifixo-inverso'],
+    ['prancha', 'prancha'],
+    ['burpee', 'olimpico'],
+    ['bike-spinning', 'bike'],
+  ]
+  for (const [id, pose] of espera) {
+    assert.equal(poseDoExercicio(EXERCICIOS.find((e) => e.id === id)!), pose, id)
+  }
 })

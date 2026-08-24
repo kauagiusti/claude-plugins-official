@@ -5,6 +5,7 @@ import { CORES_NIVEL } from '../lib/forca'
 import { recordes, useStore } from '../lib/store'
 import type { Equipamento, Exercicio, GrupoMuscular } from '../types'
 import { Chip, Etiqueta, Painel, Vazio } from './ui'
+import { FiguraExercicio } from './FiguraExercicio'
 
 export function SeletorExercicio({
   aberto,
@@ -102,6 +103,11 @@ export function SeletorExercicio({
                   className="flex w-full items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02]
                              px-3.5 py-3 text-left transition hover:border-lime/30"
                 >
+                  <FiguraExercicio
+                    exercicio={ex}
+                    tamanho={42}
+                    className="shrink-0 rounded-lg bg-white/[0.04] p-0.5 text-slate-300"
+                  />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[15px]">{ex.nome}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">

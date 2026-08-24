@@ -2,6 +2,7 @@ import { Award, Lock, Medal, TrendingUp, Trophy } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { GraficoCalorias, GraficoPeso, GraficoVolume } from '../components/Graficos'
 import { Barra, Cartao, Chip, Estatistica, Etiqueta, TituloSecao, Vazio } from '../components/ui'
+import { FiguraExercicio } from '../components/FiguraExercicio'
 import { EXERCICIOS_POR_ID } from '../data/exercicios'
 import { LIFTS_PRINCIPAIS, NOME_LIFT } from '../data/padroesForca'
 import { CORES_NIVEL, CORES_TIER, NIVEIS, scoreGeral, tierDoScore } from '../lib/forca'
@@ -194,6 +195,13 @@ function SecaoForca() {
                 key={pr.exercicioId}
                 className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3.5 py-2.5"
               >
+                {ex && (
+                  <FiguraExercicio
+                    exercicio={ex}
+                    tamanho={36}
+                    className="shrink-0 rounded-lg bg-white/[0.04] text-slate-400"
+                  />
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm">{ex?.nome ?? pr.exercicioId}</p>
                   <p className="text-[11px] text-slate-500">
