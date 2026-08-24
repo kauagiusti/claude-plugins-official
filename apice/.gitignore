@@ -1,5 +1,7 @@
 node_modules/
 dist/
+dist-site/
+.site-unico/
 .vite/
 *.local
 .DS_Store

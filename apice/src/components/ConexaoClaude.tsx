@@ -75,6 +75,16 @@ export function ConexaoClaude() {
         </div>
       </Cartao>
 
+      {import.meta.env.VITE_PREVIEW_SANDBOX && (
+        <Aviso tom="info">
+          <strong className="font-semibold">Esta é a versão de demonstração.</strong> Ela roda num
+          sandbox que bloqueia chamadas para fora do domínio, então o teste de conexão e a análise
+          por foto vão falhar aqui mesmo com uma chave válida. Todo o resto — treino, ranking de
+          força, tabela de alimentos, metas e gráficos — funciona normalmente. Para usar o Claude,
+          rode o app num host próprio ou no iPhone.
+        </Aviso>
+      )}
+
       {/* ------------------------------ Chave ----------------------------- */}
       <Cartao className="space-y-3">
         <div>

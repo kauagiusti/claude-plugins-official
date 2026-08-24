@@ -57,6 +57,8 @@ npm run preview      # serve o build em :4173
 npm run typecheck
 npm run smoke        # smoke test em navegador real (precisa do preview no ar)
 
+npm run site         # o app inteiro num único HTML (dist-site/apice.html)
+
 npm run sync         # leva o build para o projeto iOS
 npm run ios          # sync + abre o Xcode (só no Mac)
 npm run capturas     # capturas da App Store, no tamanho exigido
@@ -105,6 +107,14 @@ seria perda real.
 
 Publique o `dist/` em qualquer host estático (Vercel, Netlify, Cloudflare Pages, GitHub Pages) e abra no celular →
 menu do navegador → **Adicionar à tela de início**.
+
+### Versão de página única
+
+`npm run site` empacota o app inteiro — JavaScript, CSS e ícones — em um `dist-site/apice.html` de ~900 kB, sem
+nenhum arquivo ao lado. Serve para mostrar o app onde só cabe uma página: anexo, pen drive, hospedeiro de
+pré-visualização. Essa build marca `VITE_PREVIEW_SANDBOX`, e a tela de conexão avisa que chamadas para a Anthropic
+podem estar bloqueadas pelo ambiente. Para publicar de verdade, use o `dist/` — ele divide o JavaScript e cacheia
+melhor.
 
 ---
 

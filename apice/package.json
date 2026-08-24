@@ -12,7 +12,8 @@
     "smoke": "node scripts/smoke.mjs",
     "sync": "npm run build && npx cap sync ios",
     "ios": "npm run sync && npx cap open ios",
-    "capturas": "node scripts/capturas-loja.mjs"
+    "capturas": "node scripts/capturas-loja.mjs",
+    "site": "node scripts/site-unico.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",
