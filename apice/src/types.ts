@@ -102,6 +102,12 @@ export interface Produto {
   atualizadoEm?: string
   /** Endereço da ficha, para o usuário conferir ou corrigir. */
   fonteUrl: string
+  /**
+   * `base` veio do Open Food Facts; `rotulo` foi digitado da embalagem pelo
+   * usuário. Muda o que a tela promete: a avaliação é a mesma, a procedência
+   * não.
+   */
+  origem: 'base' | 'rotulo'
 }
 
 export interface MarcadorAlto {

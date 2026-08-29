@@ -22,6 +22,8 @@ import type { NutrientesPor100, Produto } from '../types'
 // ---------------------------------------------------------------------------
 
 const API = 'https://world.openfoodfacts.org/api/v2/product'
+/** A v0 responde a registros antigos que a v2 nem sempre devolve. */
+const API_V0 = 'https://world.openfoodfacts.org/api/v0/product'
 const FICHA = 'https://world.openfoodfacts.org/product'
 
 const CAMPOS = [
@@ -151,6 +153,36 @@ export function normalizarResposta(bruto: Record<string, unknown>, codigo: strin
     imagemUrl: texto('image_front_small_url'),
     atualizadoEm: modificado ? new Date(modificado * 1000).toISOString().slice(0, 10) : undefined,
     fonteUrl: `${FICHA}/${codigo}`,
+    origem: 'base',
+  }
+}
+
+/**
+ * Produto vazio para o usuário preencher com o que está impresso na embalagem.
+ *
+ * É a saída para o caso que a base não cobre — e ela não cobre pouca coisa: é
+ * colaborativa, e marca regional, produto novo e item de padaria simplesmente
+ * não estão lá. Sem isto, "não encontrei" é um beco sem saída; com isto, o
+ * usuário digita oito números do rótulo e recebe a mesma avaliação.
+ */
+export function produtoEmBranco(codigo: string): Produto {
+  return {
+    codigo,
+    nome: '',
+    liquido: false,
+    por100: {
+      kcal: null,
+      proteina: null,
+      carbo: null,
+      gordura: null,
+      gorduraSaturada: null,
+      fibra: null,
+      acucar: null,
+      sodio: null,
+    },
+    aditivos: [],
+    fonteUrl: codigo ? `${FICHA}/${codigo}` : FICHA,
+    origem: 'rotulo',
   }
 }
 
@@ -168,6 +200,61 @@ async function transporte(): Promise<typeof fetch> {
   }
 }
 
+/** Falha de rede: o pedido não chegou à base, ou a resposta não voltou. */
+export class BaseInacessivel extends Error {
+  causa?: unknown
+  constructor(mensagem: string, causa?: unknown) {
+    super(mensagem)
+    this.name = 'BaseInacessivel'
+    this.causa = causa
+  }
+}
+
+/**
+ * A resposta traz o produto?
+ *
+ * Deliberadamente frouxo. A API já usou `status: 1` e passou a usar
+ * `status: "success"`; um cliente que exige um dos dois quebra quando o outro
+ * chega — e quebra do pior jeito possível, dizendo "produto não encontrado"
+ * para um produto que a base tem. Quem decide aqui é a existência do produto,
+ * não o rótulo do status.
+ */
+function achou(corpo: { status?: unknown; product?: Record<string, unknown> }): boolean {
+  if (!corpo.product || typeof corpo.product !== 'object') return false
+  if (Object.keys(corpo.product).length === 0) return false
+  const s = corpo.status
+  if (s === 0 || s === '0' || s === 'failure' || s === 'not_found') return false
+  return true
+}
+
+/** O produto voltou, mas sem nenhum nutriente — vale tentar de novo sem filtro. */
+function semNutrientes(p: Produto): boolean {
+  return Object.values(p.por100).every((v) => v == null)
+}
+
+async function pedir(
+  requisicao: typeof fetch,
+  url: string,
+  sinal?: AbortSignal,
+): Promise<{ status?: unknown; product?: Record<string, unknown> } | 'ausente'> {
+  let resposta: Response
+  try {
+    resposta = await requisicao(url, { signal: sinal, headers: { Accept: 'application/json' } })
+  } catch (e) {
+    if ((e as Error)?.name === 'AbortError') throw e
+    throw new BaseInacessivel('não foi possível falar com a base de produtos', e)
+  }
+
+  if (resposta.status === 404) return 'ausente'
+  if (!resposta.ok) throw new BaseInacessivel(`a base respondeu ${resposta.status}`)
+
+  try {
+    return (await resposta.json()) as { status?: unknown; product?: Record<string, unknown> }
+  } catch (e) {
+    throw new BaseInacessivel('a base respondeu num formato inesperado', e)
+  }
+}
+
 /** Busca o produto pelo código de barras. */
 export async function buscarProduto(
   codigo: string,
@@ -177,18 +264,34 @@ export async function buscarProduto(
   if (!codigoValido(limpo)) throw new Error('Código de barras inválido.')
 
   const requisicao = opcoes.requisicao ?? (await transporte())
-  const resposta = await requisicao(`${API}/${limpo}.json?fields=${CAMPOS}`, {
-    signal: opcoes.sinal,
-    headers: { Accept: 'application/json' },
-  })
 
-  if (resposta.status === 404) throw new ProdutoNaoEncontrado(limpo)
-  if (!resposta.ok) throw new Error(`A base de produtos respondeu ${resposta.status}.`)
+  const primeira = await pedir(requisicao, `${API}/${limpo}.json?fields=${CAMPOS}`, opcoes.sinal)
+  if (primeira !== 'ausente' && achou(primeira)) {
+    const produto = normalizarResposta(primeira.product!, limpo)
+    if (!semNutrientes(produto)) return produto
 
-  const corpo = (await resposta.json()) as { status?: number; product?: Record<string, unknown> }
-  if (corpo.status !== 1 || !corpo.product) throw new ProdutoNaoEncontrado(limpo)
+    // Veio o registro mas sem nutriente nenhum. Antes de dizer que o produto
+    // não serve, tenta sem `fields`: se um nome de campo mudar do lado da base,
+    // o filtro é justamente o que devolve um produto oco.
+    try {
+      const completa = await pedir(requisicao, `${API}/${limpo}.json`, opcoes.sinal)
+      if (completa !== 'ausente' && achou(completa)) {
+        const cheio = normalizarResposta(completa.product!, limpo)
+        if (!semNutrientes(cheio)) return cheio
+      }
+    } catch {
+      // A segunda tentativa é melhoria, não requisito: se falhar, devolve o
+      // que a primeira trouxe e a tela mostra o que está faltando.
+    }
+    return produto
+  }
 
-  return normalizarResposta(corpo.product, limpo)
+  // Sem produto na v2. A base ainda mantém a v0, que responde a códigos
+  // antigos que a v2 às vezes não devolve.
+  const antiga = await pedir(requisicao, `${API_V0}/${limpo}.json`, opcoes.sinal)
+  if (antiga !== 'ausente' && achou(antiga)) return normalizarResposta(antiga.product!, limpo)
+
+  throw new ProdutoNaoEncontrado(limpo)
 }
 
 /** Macros de uma quantidade do produto, na estrutura que o diário usa. */

@@ -41,6 +41,9 @@ O que é enviado: **o número do código de barras, e nada mais.** Nenhum dado s
 acompanha a consulta — nem perfil, nem histórico, nem identificador. A imagem da
 câmera é processada no próprio aparelho e nunca é transmitida.
 
+Se o produto não estiver na base, você pode preencher a tabela nutricional à mão.
+Nesse caso nada sai do aparelho: a avaliação é calculada localmente.
+
 Essa consulta funciona sem chave de API e sem cadastro. A política do Open Food Facts
 está em https://world.openfoodfacts.org/privacy
 

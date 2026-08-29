@@ -4,18 +4,22 @@ import {
   Check,
   ExternalLink,
   Keyboard,
+  ClipboardList,
   Loader2,
+  Pencil,
   Plus,
   RefreshCw,
   ShieldCheck,
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  BaseInacessivel,
   buscarProduto,
   codigoValido,
   digitoVerificadorOk,
   lacunasNoDiario,
   macrosDaPorcao,
+  produtoEmBranco,
   ProdutoNaoEncontrado,
 } from '../lib/produtos'
 import { avaliarProduto, descreverNova, formatarAditivo } from '../lib/rotulo'
@@ -25,7 +29,7 @@ import { vibrar } from '../lib/nativo'
 import type { Produto, TipoRefeicao } from '../types'
 import { Aviso, Botao, Campo, Cartao, Chip, Painel, Selecao, cx } from './ui'
 
-type Etapa = 'camera' | 'manual' | 'buscando' | 'produto'
+type Etapa = 'camera' | 'manual' | 'buscando' | 'produto' | 'rotulo'
 
 /**
  * Leitura de código de barras e avaliação do produto.
@@ -86,12 +90,17 @@ export function EscanearProduto({
         void vibrar('sucesso')
       } catch (e) {
         setProduto(null)
+        // Três desfechos diferentes, três mensagens diferentes. Juntar tudo em
+        // "não encontrado" faz o usuário achar que o produto não existe quando
+        // o que faltou foi internet.
         setErro(
           e instanceof ProdutoNaoEncontrado
-            ? `O código ${valor} não está no Open Food Facts. A base é colaborativa e não cobre tudo — dá para cadastrar o produto lá, ou registrar pela tabela de alimentos.`
-            : e instanceof Error
-              ? `Não consegui consultar a base: ${e.message}`
-              : 'Não consegui consultar a base de produtos.',
+            ? `O código ${valor} não está no Open Food Facts. A base é colaborativa e não cobre tudo — marca regional, produto novo e item de padaria costumam faltar.`
+            : e instanceof BaseInacessivel
+              ? 'Não consegui falar com a base de produtos. Pode ser internet, ou o ambiente estar bloqueando o acesso.'
+              : e instanceof Error
+                ? `Não consegui consultar a base: ${e.message}`
+                : 'Não consegui consultar a base de produtos.',
         )
         setEtapa('manual')
         void vibrar('erro')
@@ -168,8 +177,10 @@ export function EscanearProduto({
       hora: horaAgora(),
       tipo,
       titulo: produto.marca ? `${produto.nome} — ${produto.marca}` : produto.nome,
-      origem: 'codigo-barras',
-      codigoBarras: produto.codigo,
+      // A procedência acompanha o dado: digitado pelo usuário não é rótulo lido
+      // do fabricante, e a lista de refeições diz isso.
+      origem: produto.origem === 'rotulo' ? 'manual' : 'codigo-barras',
+      codigoBarras: produto.codigo || undefined,
       itens: [
         {
           nome: produto.nome,
@@ -202,9 +213,22 @@ export function EscanearProduto({
               Aponte para o código de barras da embalagem. A leitura é conferida pelo dígito verificador antes de
               consultar a base.
             </p>
-            <Botao variante="secundario" className="w-full" onClick={() => setEtapa('manual')}>
-              <Keyboard size={17} /> Digitar o código
-            </Botao>
+            <div className="grid grid-cols-2 gap-2">
+              <Botao variante="secundario" onClick={() => setEtapa('manual')}>
+                <Keyboard size={17} /> Digitar código
+              </Botao>
+              <Botao
+                variante="secundario"
+                onClick={() => {
+                  pararCamera()
+                  setProduto(produtoEmBranco(''))
+                  setQuantidade(100)
+                  setEtapa('rotulo')
+                }}
+              >
+                <ClipboardList size={17} /> Pelo rótulo
+              </Botao>
+            </div>
           </>
         )}
 
@@ -246,7 +270,38 @@ export function EscanearProduto({
                 <RefreshCw size={17} />
               </Botao>
             </div>
+
+            <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-3.5">
+              <p className="text-sm font-medium text-slate-200">Produto não está na base?</p>
+              <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                Copie os oito números da tabela nutricional da embalagem. A avaliação é exatamente a mesma — os
+                limiares da ANVISA não dependem de onde o número veio.
+              </p>
+              <Botao
+                variante="secundario"
+                className="mt-3 w-full"
+                onClick={() => {
+                  setProduto(produtoEmBranco(digitadoOk ? digitado : ''))
+                  setQuantidade(100)
+                  setEtapa('rotulo')
+                }}
+              >
+                <ClipboardList size={17} /> Preencher pelo rótulo
+              </Botao>
+            </div>
           </>
+        )}
+
+        {etapa === 'rotulo' && produto && (
+          <FormularioRotulo
+            produto={produto}
+            aoMudar={setProduto}
+            aoConcluir={() => {
+              setQuantidade(produto.porcaoG && produto.porcaoG > 0 ? produto.porcaoG : 100)
+              setEtapa('produto')
+            }}
+            aoVoltar={() => setEtapa('manual')}
+          />
         )}
 
         {etapa === 'buscando' && (
@@ -269,6 +324,7 @@ export function EscanearProduto({
               setDigitado('')
               setEtapa('camera')
             }}
+            aoCorrigir={produto.origem === 'rotulo' ? () => setEtapa('rotulo') : undefined}
           />
         )}
       </div>
@@ -278,6 +334,185 @@ export function EscanearProduto({
 
 // ---------------------------------------------------------------------------
 
+/** Campos da tabela nutricional, na ordem em que a embalagem brasileira imprime. */
+const CAMPOS_ROTULO: { chave: keyof Produto['por100']; rotulo: string; unidade: string }[] = [
+  { chave: 'kcal', rotulo: 'Valor energético', unidade: 'kcal' },
+  { chave: 'carbo', rotulo: 'Carboidratos', unidade: 'g' },
+  { chave: 'acucar', rotulo: 'Açúcares totais', unidade: 'g' },
+  { chave: 'proteina', rotulo: 'Proteínas', unidade: 'g' },
+  { chave: 'gordura', rotulo: 'Gorduras totais', unidade: 'g' },
+  { chave: 'gorduraSaturada', rotulo: 'Gorduras saturadas', unidade: 'g' },
+  { chave: 'fibra', rotulo: 'Fibra alimentar', unidade: 'g' },
+  { chave: 'sodio', rotulo: 'Sódio', unidade: 'mg' },
+]
+
+/**
+ * Preencher o produto com o que está impresso na embalagem.
+ *
+ * A base de produtos é colaborativa e não cobre tudo. Sem esta tela, "não
+ * encontrei" é o fim da linha; com ela, o usuário copia a tabela nutricional e
+ * recebe a mesma avaliação — os limiares da ANVISA não dependem da origem do
+ * número.
+ *
+ * Campo em branco continua em branco: vira `null`, fica fora do julgamento e é
+ * listado como "sem dado". Zero é uma afirmação, e o app não a faz pelo usuário.
+ */
+function FormularioRotulo({
+  produto,
+  aoMudar,
+  aoConcluir,
+  aoVoltar,
+}: {
+  produto: Produto
+  aoMudar: (p: Produto) => void
+  aoConcluir: () => void
+  aoVoltar: () => void
+}) {
+  // Rótulo antigo traz a tabela por porção; o atual, por 100 g. A conversão
+  // acontece na hora de avaliar, não enquanto a pessoa digita.
+  const [base, setBase] = useState<'100' | 'porcao'>('100')
+  const [porcao, setPorcao] = useState(produto.porcaoG ? String(produto.porcaoG) : '')
+  const [valores, setValores] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      CAMPOS_ROTULO.map((c) => [c.chave, produto.por100[c.chave] == null ? '' : String(produto.por100[c.chave])]),
+    ),
+  )
+
+  const gramasPorcao = Number(porcao.replace(',', '.'))
+  const porcaoOk = Number.isFinite(gramasPorcao) && gramasPorcao > 0
+  const precisaPorcao = base === 'porcao' && !porcaoOk
+  const nomeOk = produto.nome.trim().length > 0
+
+  function concluir() {
+    // Por porção, tudo é reescalado para 100 g antes de virar Produto — daí
+    // para a frente o resto do app não sabe (nem precisa saber) que o usuário
+    // digitou de outro jeito.
+    const fator = base === 'porcao' ? 100 / gramasPorcao : 1
+    const por100 = { ...produto.por100 }
+    for (const c of CAMPOS_ROTULO) {
+      const bruto = valores[c.chave]?.replace(',', '.').trim()
+      const n = bruto ? Number(bruto) : NaN
+      por100[c.chave] = Number.isFinite(n) && n >= 0 ? n * fator : null
+    }
+    aoMudar({ ...produto, por100, porcaoG: porcaoOk ? gramasPorcao : undefined })
+    aoConcluir()
+  }
+
+  return (
+    <div className="space-y-3">
+      <Aviso tom="info">
+        Copie da tabela nutricional da embalagem. O que você deixar em branco fica de fora da avaliação — não vira
+        zero.
+      </Aviso>
+
+      <Cartao className="space-y-3">
+        <Campo
+          rotulo="Nome do produto"
+          type="text"
+          placeholder="Biscoito integral de aveia"
+          value={produto.nome}
+          autoFocus
+          onChange={(e) => aoMudar({ ...produto, nome: e.target.value })}
+        />
+        <div className="grid grid-cols-2 gap-3">
+          <Campo
+            rotulo="Marca (opcional)"
+            type="text"
+            value={produto.marca ?? ''}
+            onChange={(e) => aoMudar({ ...produto, marca: e.target.value || undefined })}
+          />
+          <Campo
+            rotulo="Porção do rótulo"
+            type="number"
+            inputMode="decimal"
+            sufixo={produto.liquido ? 'ml' : 'g'}
+            placeholder="30"
+            value={porcao}
+            onChange={(e) => setPorcao(e.target.value)}
+          />
+        </div>
+        <div className="flex gap-2">
+          <Chip ativo={!produto.liquido} onClick={() => aoMudar({ ...produto, liquido: false })}>
+            Sólido
+          </Chip>
+          <Chip ativo={produto.liquido} onClick={() => aoMudar({ ...produto, liquido: true })}>
+            Líquido
+          </Chip>
+        </div>
+        <p className="text-[11px] leading-relaxed text-slate-500">
+          Líquido muda os limiares: a norma cobra 7,5 g de açúcar por 100 ml, contra 15 g por 100 g no sólido.
+        </p>
+      </Cartao>
+
+      <Cartao className="space-y-3">
+        <div>
+          <span className="rotulo">Os valores do rótulo estão por</span>
+          <div className="flex gap-2">
+            <Chip ativo={base === '100'} onClick={() => setBase('100')}>
+              100 {produto.liquido ? 'ml' : 'g'}
+            </Chip>
+            <Chip ativo={base === 'porcao'} onClick={() => setBase('porcao')}>
+              porção
+            </Chip>
+          </div>
+          {precisaPorcao && (
+            <p className="mt-1.5 text-xs text-amber-200">
+              Informe o tamanho da porção acima para eu converter para 100 {produto.liquido ? 'ml' : 'g'}.
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          {CAMPOS_ROTULO.map((c) => (
+            <div key={c.chave} className="flex items-center gap-3">
+              <label htmlFor={`rotulo-${c.chave}`} className="flex-1 text-sm text-slate-300">
+                {c.rotulo}
+              </label>
+              <div className="relative w-28">
+                <input
+                  id={`rotulo-${c.chave}`}
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="—"
+                  value={valores[c.chave] ?? ''}
+                  onChange={(e) => setValores((v) => ({ ...v, [c.chave]: e.target.value }))}
+                  className="campo py-2 pr-11 text-right tabular-nums"
+                />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">
+                  {c.unidade}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Cartao>
+
+      <Cartao className="space-y-3">
+        <Campo
+          rotulo="Ingredientes (opcional)"
+          type="text"
+          placeholder="Farinha de trigo, açúcar, gordura vegetal…"
+          value={produto.ingredientes ?? ''}
+          onChange={(e) => aoMudar({ ...produto, ingredientes: e.target.value || undefined })}
+        />
+        <p className="text-[11px] leading-relaxed text-slate-500">
+          Vale copiar: é a lista de ingredientes que separa açúcar adicionado do açúcar da própria fruta ou do
+          leite. Sem ela, um alerta de açúcar fica marcado como provável.
+        </p>
+      </Cartao>
+
+      <div className="flex gap-2">
+        <Botao className="flex-1" onClick={concluir} disabled={!nomeOk || precisaPorcao}>
+          <Check size={17} /> Avaliar
+        </Botao>
+        <Botao variante="secundario" onClick={aoVoltar}>
+          Voltar
+        </Botao>
+      </div>
+    </div>
+  )
+}
+
 function FichaProduto({
   produto,
   quantidade,
@@ -286,6 +521,7 @@ function FichaProduto({
   setTipo,
   aoSalvar,
   aoEscanearOutro,
+  aoCorrigir,
 }: {
   produto: Produto
   quantidade: number
@@ -294,6 +530,8 @@ function FichaProduto({
   setTipo: (t: TipoRefeicao) => void
   aoSalvar: () => void
   aoEscanearOutro: () => void
+  /** Só existe quando os dados foram digitados: permite voltar e corrigir. */
+  aoCorrigir?: () => void
 }) {
   const a = avaliarProduto(produto)
   const m = macrosDaPorcao(produto, quantidade)
@@ -316,7 +554,7 @@ function FichaProduto({
           <p className="font-semibold leading-tight">{produto.nome}</p>
           {produto.marca && <p className="text-xs text-slate-400">{produto.marca}</p>}
           <p className="mt-0.5 text-[11px] tabular-nums text-slate-500">
-            {produto.codigo}
+            {produto.codigo || 'sem código de barras'}
             {produto.embalagem ? ` · ${produto.embalagem}` : ''}
           </p>
         </div>
@@ -503,21 +741,34 @@ function FichaProduto({
       </Cartao>
 
       {/* ----------------------------- Procedência -------------------------- */}
-      <p className="px-1 text-[11px] leading-relaxed text-slate-500">
-        <Check size={11} className="mr-1 inline" />
-        Dados do <strong className="text-slate-400">Open Food Facts</strong>, base aberta alimentada por
-        colaboradores a partir da embalagem
-        {produto.atualizadoEm ? `, atualizada em ${formatarBR(produto.atualizadoEm)}` : ''}. Nenhum número desta
-        tela foi estimado pelo app.{' '}
-        <a
-          href={produto.fonteUrl}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="text-sky2 underline underline-offset-2"
-        >
-          Conferir ou corrigir a ficha <ExternalLink size={10} className="inline" />
-        </a>
-      </p>
+      {produto.origem === 'rotulo' ? (
+        <p className="px-1 text-[11px] leading-relaxed text-slate-500">
+          <Pencil size={11} className="mr-1 inline" />
+          Valores copiados por você da embalagem. A avaliação usa os mesmos limiares da ANVISA — o que muda é a
+          procedência: aqui quem conferiu o rótulo foi você.{' '}
+          {aoCorrigir && (
+            <button onClick={aoCorrigir} className="text-sky2 underline underline-offset-2">
+              Corrigir os valores
+            </button>
+          )}
+        </p>
+      ) : (
+        <p className="px-1 text-[11px] leading-relaxed text-slate-500">
+          <Check size={11} className="mr-1 inline" />
+          Dados do <strong className="text-slate-400">Open Food Facts</strong>, base aberta alimentada por
+          colaboradores a partir da embalagem
+          {produto.atualizadoEm ? `, atualizada em ${formatarBR(produto.atualizadoEm)}` : ''}. Nenhum número desta
+          tela foi estimado pelo app.{' '}
+          <a
+            href={produto.fonteUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="text-sky2 underline underline-offset-2"
+          >
+            Conferir ou corrigir a ficha <ExternalLink size={10} className="inline" />
+          </a>
+        </p>
+      )}
     </div>
   )
 }

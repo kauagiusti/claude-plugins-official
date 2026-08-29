@@ -23,6 +23,16 @@ import {
 import { avaliarProduto, temAcucarAdicionado } from '../src/lib/rotulo.ts'
 import { EXERCICIOS } from '../src/data/exercicios.ts'
 import { POSES, poseDoExercicio } from '../src/lib/figuras.ts'
+import { ALIMENTOS } from '../src/data/alimentos.ts'
+import {
+  idsDosModelos,
+  momentoDaHora,
+  momentosRestantes,
+  planoDoDia,
+  sementeDoDia,
+  sugerirRefeicao,
+  totaisDoPlano,
+} from '../src/lib/refeicoes.ts'
 
 // ---------------------------------------------------------------------------
 // Código de barras
@@ -334,4 +344,123 @@ test('cada exercício de referência mostra o desenho do próprio movimento', ()
   for (const [id, pose] of espera) {
     assert.equal(poseDoExercicio(EXERCICIOS.find((e) => e.id === id)!), pose, id)
   }
+})
+
+// ---------------------------------------------------------------------------
+// Sugestão de refeição
+// ---------------------------------------------------------------------------
+
+const SEM_FALTA = { kcal: 2400, proteina: 150, carbo: 0, gordura: 0, fibra: 0 }
+
+test('todo alimento citado nos modelos existe na tabela', () => {
+  const conhecidos = new Set(ALIMENTOS.map((a) => a.id))
+  const fantasmas = idsDosModelos().filter((id) => !conhecidos.has(id))
+  // Um id com erro de digitação some do prato em silêncio — a refeição fica
+  // menor e ninguém percebe. Por isso este teste existe.
+  assert.deepEqual(fantasmas, [])
+})
+
+test('o momento sai da hora do dia', () => {
+  assert.equal(momentoDaHora(7), 'cafe')
+  assert.equal(momentoDaHora(12), 'almoco')
+  assert.equal(momentoDaHora(16), 'lanche_tarde')
+  assert.equal(momentoDaHora(20), 'jantar')
+  assert.equal(momentoDaHora(23), 'ceia')
+  assert.equal(momentosRestantes(20).length, 2) // jantar e ceia
+  assert.equal(momentosRestantes(6).length, 6)
+})
+
+test('a refeição chega perto do alvo de energia e proteína', () => {
+  for (let i = 0; i < 30; i++) {
+    const r = sugerirRefeicao('almoco', { kcal: 750, proteina: 45 }, sementeDoDia('2026-08-29', i))
+    assert.ok(r.macros.kcal > 750 * 0.7, `${r.nome} entregou só ${Math.round(r.macros.kcal)} kcal`)
+    assert.ok(r.macros.kcal < 750 * 1.35, `${r.nome} entregou ${Math.round(r.macros.kcal)} kcal`)
+    assert.ok(r.macros.proteina > 45 * 0.6, `${r.nome} entregou ${r.macros.proteina.toFixed(0)} g de proteína`)
+  }
+})
+
+test('nenhuma porção é absurda', () => {
+  for (const momento of ['cafe', 'almoco', 'jantar', 'lanche_tarde'] as const) {
+    for (let i = 0; i < 20; i++) {
+      const r = sugerirRefeicao(momento, { kcal: 900, proteina: 60 }, sementeDoDia('2026-08-29', i))
+      for (const item of r.itens) {
+        assert.ok(item.gramas > 0, `${item.alimento.nome} com quantidade zero`)
+        assert.ok(item.gramas <= 400, `${item.gramas} g de ${item.alimento.nome} não é porção de gente`)
+        const caseira = item.alimento.porcaoCaseira
+        if (caseira) {
+          assert.ok(
+            item.gramas <= caseira.gramas * 4 + 1,
+            `${item.medida} de ${item.alimento.nome} passa de 4 porções caseiras`,
+          )
+        }
+      }
+    }
+  }
+})
+
+test('a medida caseira não mente sobre a quantidade', () => {
+  for (let i = 0; i < 40; i++) {
+    const r = sugerirRefeicao('cafe', { kcal: 600, proteina: 35 }, sementeDoDia('2026-08-29', i))
+    for (const item of r.itens) {
+      // Nada de "½ 1/2 unidade" nem de "300 g (1/2 unidade)".
+      assert.doesNotMatch(item.medida, /[½\d]\s+\d\/\d/, item.medida)
+      const emParenteses = item.medida.match(/\((\d+) g\)/)
+      if (emParenteses) assert.equal(Number(emParenteses[1]), item.gramas, item.medida)
+    }
+  }
+})
+
+test('as sugestões variam de verdade', () => {
+  const pratos = new Set<string>()
+  for (let i = 0; i < 20; i++) {
+    const r = sugerirRefeicao('almoco', { kcal: 700, proteina: 45 }, sementeDoDia('2026-08-29', i))
+    pratos.add(r.itens.map((x) => x.alimento.id).join('+'))
+  }
+  // Vinte pedidos não podem devolver os mesmos três pratos de sempre.
+  assert.ok(pratos.size >= 12, `só ${pratos.size} pratos diferentes em 20 sorteios`)
+})
+
+test('a mesma semente devolve a mesma refeição', () => {
+  const a = sugerirRefeicao('jantar', { kcal: 600, proteina: 40 }, 12345)
+  const b = sugerirRefeicao('jantar', { kcal: 600, proteina: 40 }, 12345)
+  assert.deepEqual(
+    a.itens.map((i) => [i.alimento.id, i.gramas]),
+    b.itens.map((i) => [i.alimento.id, i.gramas]),
+  )
+})
+
+test('o que já foi comido hoje não é sugerido de novo', () => {
+  const evitar = new Set(['Peito de frango grelhado', 'Arroz branco cozido'])
+  for (let i = 0; i < 25; i++) {
+    const r = sugerirRefeicao('almoco', { kcal: 700, proteina: 45 }, sementeDoDia('2026-08-29', i), evitar)
+    for (const item of r.itens) assert.ok(!evitar.has(item.alimento.nome), `repetiu ${item.alimento.nome}`)
+  }
+})
+
+test('o plano do dia cobre as metas sem estourar', () => {
+  for (let i = 0; i < 15; i++) {
+    const plano = planoDoDia(SEM_FALTA, 6, sementeDoDia('2026-08-29', i))
+    assert.equal(plano.length, 6)
+    const t = totaisDoPlano(plano)
+    assert.ok(t.kcal > SEM_FALTA.kcal * 0.8, `plano com ${Math.round(t.kcal)} kcal`)
+    assert.ok(t.kcal < SEM_FALTA.kcal * 1.2, `plano com ${Math.round(t.kcal)} kcal`)
+    assert.ok(t.proteina > SEM_FALTA.proteina * 0.8, `plano com ${t.proteina.toFixed(0)} g de proteína`)
+  }
+})
+
+test('uma refeição do plano não repete alimento de outra', () => {
+  const plano = planoDoDia(SEM_FALTA, 6, sementeDoDia('2026-08-29', 5))
+  const vistos = new Set<string>()
+  for (const r of plano) {
+    for (const item of r.itens) {
+      assert.ok(!vistos.has(item.alimento.id), `${item.alimento.nome} aparece duas vezes no mesmo dia`)
+      vistos.add(item.alimento.id)
+    }
+  }
+})
+
+test('plano tarde da noite ainda sugere alguma coisa', () => {
+  const plano = planoDoDia({ kcal: -300, proteina: 10, carbo: 0, gordura: 0, fibra: 0 }, 22, 42)
+  assert.equal(plano.length, 1)
+  assert.ok(plano[0].itens.length > 0, 'dia estourado ainda precisa de conselho, não de silêncio')
 })

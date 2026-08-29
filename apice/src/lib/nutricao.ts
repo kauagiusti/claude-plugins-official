@@ -162,6 +162,20 @@ function refeicoesRestantesHoje(hora: number): number {
 }
 
 /**
+ * Escolhe uma das redações possíveis para o conselho.
+ *
+ * O conteúdo é sempre o mesmo — o que muda é como está dito. Um app que repete
+ * a mesma frase todo dia deixa de ser lido no terceiro dia, e aí o conselho não
+ * chega nem quando importa.
+ */
+function variar(opcoes: string[], agora: Date): string {
+  // Varia por dia e por período, não a cada renderização: texto que muda
+  // sozinho enquanto se lê é pior que texto repetido.
+  const indice = (agora.getDate() * 4 + Math.floor(agora.getHours() / 6)) % opcoes.length
+  return opcoes[indice]
+}
+
+/**
  * Motor local de recomendação — roda sem depender da IA, para o app continuar
  * útil offline ou sem chave de API configurada.
  */
@@ -201,8 +215,23 @@ export function recomendacaoLocal(consumido: Macros, metas: Metas, agora = new D
     titulo = `${Math.abs(Math.round(r.kcal))} kcal acima da meta`
     texto =
       faltam > 0
-        ? `Você já passou da meta e ainda faltam refeições no dia. Segure o resto em proteína magra e vegetais — ou compense com uma caminhada de 30 a 40 minutos.`
-        : `Dia fechado acima da meta. Um dia isolado não desfaz a semana: retome amanhã no mesmo ritmo, sem cortar demais para compensar.`
+        ? variar(
+            [
+              'Você já passou da meta e ainda faltam refeições no dia. Segure o resto em proteína magra e vegetais — ou compense com uma caminhada de 30 a 40 minutos.',
+              'Passou da meta com o dia em aberto. Daqui para a frente, prato de proteína e vegetal: enche sem somar muito.',
+              'A meta já foi. Não precisa pular refeição — precisa que as próximas sejam leves e proteicas.',
+              'Acima do alvo e ainda há refeições pela frente. Uma caminhada de meia hora devolve boa parte disso.',
+            ],
+            agora,
+          )
+        : variar(
+            [
+              'Dia fechado acima da meta. Um dia isolado não desfaz a semana: retome amanhã no mesmo ritmo, sem cortar demais para compensar.',
+              'Fechou acima. O que decide resultado é a média da semana, não a linha de hoje — amanhã segue igual.',
+              'Dia acima da meta, e tudo bem. Compensar cortando demais amanhã costuma sair pior que o próprio excesso.',
+            ],
+            agora,
+          )
   } else if (r.proteina > 40 && faltam <= 1) {
     tom = 'alerta'
     titulo = `Faltam ${Math.round(r.proteina)} g de proteína`
@@ -213,18 +242,47 @@ export function recomendacaoLocal(consumido: Macros, metas: Metas, agora = new D
   } else if (r.proteina > 25) {
     tom = 'atencao'
     titulo = `Faltam ${Math.round(r.proteina)} g de proteína`
-    texto = `Você tem ${Math.round(r.kcal)} kcal de espaço. Priorize proteína nas próximas ${faltam || 1} refeição(ões) — é o macro que mais protege a massa magra.`
+    texto = variar(
+      [
+        `Você tem ${Math.round(r.kcal)} kcal de espaço. Priorize proteína nas próximas ${faltam || 1} refeições — é o macro que mais protege a massa magra.`,
+        `Sobram ${Math.round(r.kcal)} kcal. Se cada refeição daqui até o fim do dia levar uma fonte de proteína, a conta fecha sozinha.`,
+        `Ainda cabem ${Math.round(r.kcal)} kcal no dia. Comece o prato pela proteína e monte o resto em volta dela.`,
+        `Falta proteína e ainda há ${Math.round(r.kcal)} kcal disponíveis — dá para resolver sem apertar em nada.`,
+      ],
+      agora,
+    )
   } else if (r.kcal > metas.kcal * 0.45 && hora >= 18) {
     tom = 'atencao'
     titulo = `Ainda faltam ${Math.round(r.kcal)} kcal`
-    texto = `Está bem abaixo da meta para o horário. Comer pouco demais derruba treino e recuperação — inclua uma refeição completa antes de dormir.`
+    texto = variar(
+      [
+        'Está bem abaixo da meta para o horário. Comer pouco demais derruba treino e recuperação — inclua uma refeição completa antes de dormir.',
+        'Faltou bastante comida para a hora que é. Déficit grande demais cobra no treino de amanhã, não hoje.',
+        'O dia está muito abaixo do alvo. Vale um jantar completo em vez de um lanche: proteína, carboidrato e vegetal.',
+      ],
+      agora,
+    )
   } else if (r.fibra > 10) {
     tom = 'atencao'
     titulo = `Fibra baixa: faltam ${Math.round(r.fibra)} g`
-    texto = `Macros bem encaminhados, mas a fibra está atrasada. Vegetais, feijão e frutas resolvem sem peso calórico relevante.`
+    texto = variar(
+      [
+        'Macros bem encaminhados, mas a fibra está atrasada. Vegetais, feijão e frutas resolvem sem peso calórico relevante.',
+        'Os macros estão no lugar; a fibra não. Uma concha de feijão e uma fruta já cobrem a diferença.',
+        'Falta fibra, e ela quase não custa caloria: salada, legume cozido ou uma fruta com casca.',
+      ],
+      agora,
+    )
   } else {
-    titulo = 'Dia no rumo certo'
-    texto = `Restam ${Math.round(r.kcal)} kcal, ${Math.round(r.proteina)} g de proteína e ${Math.round(r.carbo)} g de carbo. Mantenha o padrão nas próximas refeições.`
+    titulo = variar(['Dia no rumo certo', 'Tudo encaminhado', 'Nada a corrigir por enquanto', 'No ritmo'], agora)
+    texto = variar(
+      [
+        `Restam ${Math.round(r.kcal)} kcal, ${Math.round(r.proteina)} g de proteína e ${Math.round(r.carbo)} g de carbo. Mantenha o padrão nas próximas refeições.`,
+        `Ainda cabem ${Math.round(r.kcal)} kcal e ${Math.round(r.proteina)} g de proteína. Do jeito que está, o dia fecha bem.`,
+        `Faltam ${Math.round(r.proteina)} g de proteína dentro de ${Math.round(r.kcal)} kcal — é folga suficiente para comer o que você quiser comer.`,
+      ],
+      agora,
+    )
   }
 
   return { titulo, texto, tom, sugestoes: sugestoes.slice(0, 3) }

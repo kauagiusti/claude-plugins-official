@@ -286,6 +286,9 @@ export function Painel({
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={aoFechar} />
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={titulo}
         className={cx(
           'relative w-full animate-slideUp overflow-hidden rounded-t-3xl border border-white/10 bg-ink-900',
           'sm:max-w-lg sm:rounded-3xl',

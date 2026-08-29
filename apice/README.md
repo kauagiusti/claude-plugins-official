@@ -21,6 +21,13 @@ aparelho — sem conta, sem servidor.
   nutricional, lista de ingredientes, aditivos e classificação NOVA. A avaliação usa os limiares reais da
   rotulagem frontal brasileira (ANVISA, RDC 429/2020): açúcar, gordura saturada e sódio acima do limite viram
   marcador "ALTO EM", com o número e o limite lado a lado. Roda sem chave de API.
+- **Quando a base não tem o produto**, dá para copiar a tabela nutricional da embalagem. A avaliação é a mesma —
+  os limiares da ANVISA não dependem de onde o número veio — e a tela deixa claro que quem conferiu o rótulo foi
+  você. Aceita valores por 100 g ou por porção, convertendo.
+- **Sugestão de prato e plano do dia.** A partir do que falta nas metas, do horário e do que você já comeu, o app
+  monta um prato de verdade — "1½ filé médio de tilápia + 2 escumadeiras de arroz integral + 1 concha de feijão
+  + salada" — e um plano para o resto do dia. Sorteia outro a cada toque, evita repetir o que já entrou no dia e
+  usa a mesma tabela de alimentos do resto do app.
 - **Tabela de alimentos** com 124 itens brasileiros (base TACO e rótulos usuais) para registrar sem foto, com
   porções caseiras — "1 concha", "1 escumadeira", "1 filé médio".
 - **Totais do dia** contra metas calculadas a partir do seu gasto energético (Mifflin-St Jeor, ou Katch-McArdle
@@ -62,7 +69,7 @@ npm run build        # gera dist/
 npm run preview      # serve o build em :4173
 npm run typecheck
 npm test             # testes das partes que decidem números
-npm run smoke        # 15 checagens em navegador real (precisa do preview no ar)
+npm run smoke        # 24 checagens em navegador real (precisa do preview no ar)
 
 npm run site         # o app inteiro num único HTML (dist-site/apice.html)
 
@@ -186,6 +193,8 @@ A regra do projeto: **nada é apresentado sem procedência, e lacuna não é pre
 | O que aparece na tela | De onde vem | O que isso vale |
 |---|---|---|
 | Macros de produto embalado | Open Food Facts, cadastrado da embalagem | Declaração do fabricante, transcrita por colaborador |
+| Macros de rótulo digitado | A embalagem, copiada por você | Declaração do fabricante, conferida por você |
+| Sugestão de prato e plano do dia | Composição da tabela de alimentos | Ponto de partida, não prescrição |
 | Marcadores "ALTO EM" | ANVISA, RDC 429/2020 e IN 75/2020 | Limiar legal, número exato, calculado no aparelho |
 | "Fonte de proteína", "alto em fibras" | ANVISA, RDC 54/2012 | Critério declarado na tela, não alegação de rótulo |
 | Grupo NOVA | Guia Alimentar / Open Food Facts | Grau de processamento, não composição |
@@ -205,10 +214,13 @@ Três consequências práticas no código:
 
 ### O que é testado
 
-`npm test` roda 24 verificações sobre as partes que erram em silêncio: conversão de sódio de grama para
+`npm test` roda 40 verificações sobre as partes que erram em silêncio: conversão de sódio de grama para
 miligrama, energia em kJ virando kcal, ausência virando `null`, limiar de líquido contra o de sólido, açúcar de
 fruta não sendo acusado de açúcar adicionado, dígito verificador contra códigos EAN publicados, e o fator de
-altura respeitando o teto e a direção. São os erros que passariam despercebidos numa olhada na tela.
+altura respeitando o teto e a direção, e — nas sugestões de prato — que nenhum alimento citado nos modelos
+esteja escrito errado, que a porção sugerida seja de gente (nada de 500 ml de suco nem quatro fatias de queijo),
+que a medida caseira não minta sobre a grama, que vinte sorteios devolvam pelo menos doze pratos diferentes e
+que o plano feche entre 80% e 120% da meta. São os erros que passariam despercebidos numa olhada na tela.
 
 ---
 
@@ -227,6 +239,7 @@ src/
 │   ├── figuras.ts          qual desenho representa cada exercício + coordenadas das poses
 │   ├── forca.ts            1RM, carga do sistema, nível, percentil, progressão
 │   ├── nutricao.ts         TMB/TDEE, metas, totais, recomendação local
+│   ├── refeicoes.ts        modelos de prato, sugestão por momento do dia e plano do dia
 │   ├── gamificacao.ts      XP, níveis, streak, 26 conquistas
 │   ├── store.ts            estado (zustand + persist) e seletores
 │   ├── imagem.ts           redimensionamento antes do envio

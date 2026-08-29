@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { AnalisadorFoto } from '../components/AnalisadorFoto'
 import { BuscaAlimento } from '../components/BuscaAlimento'
 import { EscanearProduto } from '../components/EscanearProduto'
+import { SugestaoPrato } from '../components/SugestaoPrato'
 import { Anel, Aviso, Barra, Botao, Cartao, Estatistica, TituloSecao, Vazio } from '../components/ui'
 import { recomendacaoLocal, restante, ROTULO_REFEICAO, totaisRefeicao } from '../lib/nutricao'
 import { diasAtras, hojeISO, metasDe, refeicoesDoDia, totaisDoDia, useStore } from '../lib/store'
@@ -122,10 +123,13 @@ export default function Nutricao() {
       </div>
 
       {ehHoje && (
-        <Aviso tom={rec.tom}>
-          <p className="font-semibold">{rec.titulo}</p>
-          <p className="mt-1 text-slate-300">{rec.texto}</p>
-        </Aviso>
+        <>
+          <Aviso tom={rec.tom}>
+            <p className="font-semibold">{rec.titulo}</p>
+            <p className="mt-1 text-slate-300">{rec.texto}</p>
+          </Aviso>
+          <SugestaoPrato data={data} />
+        </>
       )}
 
       {/* ---------------------------- Refeições ----------------------------- */}

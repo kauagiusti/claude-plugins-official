@@ -86,6 +86,8 @@ const PRODUTO_FALSO = {
   },
 }
 
+const painel = () => pagina.getByRole('dialog')
+
 const checagens = []
 const conferir = (nome, ok) => {
   checagens.push({ nome, ok })
@@ -101,7 +103,14 @@ const contexto = await navegador.newContext({
 const pagina = await contexto.newPage()
 
 const erros = []
-pagina.on('console', (m) => m.type() === 'error' && erros.push(m.text()))
+pagina.on('console', (m) => {
+  if (m.type() !== 'error') return
+  // O 404 da base de produtos é encenado por este próprio teste, para exercitar
+  // o caminho de "produto ausente". Contá-lo como erro do app seria reprovar a
+  // checagem justamente quando ela funciona.
+  if (m.location()?.url?.includes('openfoodfacts.org')) return
+  erros.push(m.text())
+})
 pagina.on('pageerror', (e) => erros.push(`PAGEERROR: ${e.message}`))
 
 await pagina.goto(URL)
@@ -136,8 +145,8 @@ await pagina.getByRole('button', { name: 'Comida' }).first().click()
 await pagina.getByRole('button', { name: 'Tabela' }).click()
 await pagina.getByPlaceholder('Arroz, frango, whey…').fill('whey')
 await pagina.getByRole('button', { name: /Whey protein isolado/ }).first().click()
-await pagina.getByRole('button', { name: /Adicionar/ }).click()
-await pagina.getByRole('button', { name: /Salvar .* kcal/ }).click()
+await painel().getByRole('button', { name: /^Adicionar$/ }).click()
+await painel().getByRole('button', { name: /Salvar .* kcal/ }).click()
 await pagina.waitForTimeout(500)
 conferir('refeição pela tabela é salva', (await pagina.getByText('Whey protein isolado').count()) > 0)
 
@@ -160,29 +169,91 @@ await pagina.getByRole('button', { name: 'Código' }).click()
 await pagina.waitForTimeout(2500)
 conferir('scanner cai para digitação sem câmera', (await pagina.getByText(/Código de barras/i).count()) > 0)
 
-const campoCodigo = pagina.locator('input[inputmode="numeric"]').last()
+const campoCodigo = painel().locator('input[inputmode="numeric"]').last()
 await campoCodigo.fill('7891000100104') // dígito verificador errado de propósito
 await pagina.waitForTimeout(300)
 conferir(
   'código com dígito verificador errado é barrado',
-  await pagina.getByRole('button', { name: /Buscar/ }).first().isDisabled(),
+  await painel().getByRole('button', { name: /Buscar/ }).first().isDisabled(),
 )
 
 await campoCodigo.fill('7891000100103')
-await pagina.getByRole('button', { name: /Buscar/ }).first().click()
+await painel().getByRole('button', { name: /Buscar/ }).first().click()
 await pagina.waitForTimeout(900)
-const fichaProduto = await pagina.locator('body').innerText()
+const fichaProduto = await painel().innerText()
 conferir('produto é exibido com o nome da base', /Biscoito recheado/i.test(fichaProduto))
 conferir('marcador ALTO EM dispara acima do limite', /Alto em açúcar/i.test(fichaProduto))
 conferir('sódio abaixo do limite não vira marcador', !/Alto em sódio/i.test(fichaProduto))
 conferir('sódio é convertido de grama para miligrama', /320 mg/.test(fichaProduto))
 conferir('a procedência do dado aparece', /Open Food Facts/i.test(fichaProduto))
 
-await pagina.getByRole('button', { name: /Adicionar ao dia/ }).click()
+await painel().getByRole('button', { name: /Adicionar ao dia/ }).click()
 await pagina.waitForTimeout(600)
 conferir(
   'produto escaneado entra no dia com a procedência',
   (await pagina.getByText(/Rótulo do fabricante/i).count()) > 0,
+)
+
+// ------------------------- Preencher pelo rótulo ----------------------------
+// A base não cobre tudo. Quando ela não tem o produto, o app precisa continuar
+// servindo para alguma coisa — é este o caminho.
+await pagina.route('**/world.openfoodfacts.org/**', (rota) =>
+  rota.fulfill({ status: 404, contentType: 'application/json', body: '{"status":0}' }),
+)
+
+await pagina.getByRole('button', { name: 'Código' }).click()
+await pagina.waitForTimeout(2500)
+await painel().locator('input[inputmode="numeric"]').last().fill('7891000100103')
+await painel().getByRole('button', { name: /Buscar/ }).first().click()
+await pagina.waitForTimeout(900)
+conferir('produto ausente é dito como ausente', /não está no Open Food Facts/i.test(await painel().innerText()))
+
+await painel().getByRole('button', { name: /Preencher pelo rótulo/ }).click()
+await pagina.waitForTimeout(400)
+await pagina.getByLabel('Nome do produto').fill('Barra de cereal')
+await pagina.getByLabel('Porção do rótulo').fill('25')
+await painel().getByRole('button', { name: /^porção$/ }).click()
+for (const [rotulo, valor] of [
+  ['Valor energético', '110'],
+  ['Açúcares totais', '9'],
+  ['Gorduras saturadas', '1.8'],
+  ['Sódio', '45'],
+]) {
+  await pagina.getByLabel(rotulo, { exact: true }).fill(valor)
+}
+await pagina.getByLabel('Ingredientes (opcional)').fill('Aveia, xarope de glicose, açúcar mascavo.')
+await painel().getByRole('button', { name: /^Avaliar$/ }).click()
+await pagina.waitForTimeout(600)
+
+const fichaRotulo = await painel().innerText()
+// 9 g de açúcar em 25 g de porção são 36 g por 100 g — bem acima dos 15 g.
+conferir('rótulo por porção é convertido para 100 g', /36\.0 g/.test(fichaRotulo))
+conferir('avaliação do rótulo digitado dispara o marcador', /Alto em açúcar/i.test(fichaRotulo))
+conferir('procedência distingue rótulo digitado da base', /copiados por você/i.test(fichaRotulo))
+await pagina.keyboard.press('Escape')
+await pagina.waitForTimeout(300)
+
+// ---------------------------- Sugestão de prato -----------------------------
+const cartaoSugestao = () => pagina.locator('text=/Sugest.o para o/i').locator('xpath=../..')
+conferir('a página sugere um prato', (await cartaoSugestao().count()) > 0)
+
+const pratoAntes = await cartaoSugestao().innerText()
+await pagina.getByRole('button', { name: 'Sugerir outro prato' }).click()
+await pagina.waitForTimeout(400)
+conferir('pedir outro prato muda a sugestão', (await cartaoSugestao().innerText()) !== pratoAntes)
+
+await pagina.getByRole('button', { name: /Plano do dia/ }).click()
+await pagina.waitForTimeout(500)
+const textoPlano = await painel().innerText()
+conferir('o plano cobre várias refeições', (textoPlano.match(/Adicionar esta refeição/g) ?? []).length >= 2)
+conferir('o plano mostra o total contra a meta', /O plano inteiro entrega/i.test(textoPlano))
+await painel().getByRole('button', { name: /Adicionar esta refeição/ }).first().click()
+await pagina.waitForTimeout(500)
+await pagina.keyboard.press('Escape')
+await pagina.waitForTimeout(400)
+conferir(
+  'refeição do plano entra no diário',
+  (await pagina.getByText(/Tabela de alimentos \(valores médios\)/i).count()) > 0,
 )
 
 // -------------------------------- Fechamento -------------------------------
