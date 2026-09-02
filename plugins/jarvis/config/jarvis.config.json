@@ -1,0 +1,31 @@
+{
+  "$comentario": "Enquanto qualquer campo estiver com ____ ou null, o JARVIS opera em modo somente-leitura. Rode `node scripts/verificar.mjs` para ver o que falta.",
+
+  "dinheiro": {
+    "moeda": "____",
+    "reembolso_max_por_pedido": null,
+    "reembolso_max_acumulado_dia": null,
+    "reembolso_max_acumulado_semana": null,
+    "ads_orcamento_mes": null,
+    "ads_gasto_max_dia": null
+  },
+
+  "escalonamento": {
+    "fuso_horario_utc_offset": null,
+    "janela_silencio": { "de": "____", "ate": "____" },
+    "categorias_que_furam_silencio": [],
+    "max_escalonamentos_por_hora": 3,
+    "telefone_emergencia": "____",
+    "email_escalonamento": "____",
+    "exemplos_p1": [],
+    "exemplos_p2": []
+  },
+
+  "conteudo": {
+    "publicacao_automatica_liberada": false,
+    "lotes_aprovados_sem_alteracao": 0,
+    "lotes_necessarios": 5
+  },
+
+  "integracoes_esperadas": ["email", "shopify", "tiktok", "youtube", "video", "telefonia"]
+}

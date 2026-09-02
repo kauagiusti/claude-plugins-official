@@ -1,0 +1,3 @@
+# O log é operacional e específico da instalação. Cada loja tem o seu, e
+# versioná-lo colocaria pedido e cliente reais no repositório.
+log/*.jsonl

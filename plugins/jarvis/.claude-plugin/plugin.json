@@ -1,0 +1,7 @@
+{
+  "name": "jarvis",
+  "description": "Assistente operacional de e-commerce com autonomia ordenada por reversibilidade: trava de configuração que impede ação com limite em branco, tetos de reembolso acumulados verificados em código, e log append-only com cadeia de hash.",
+  "author": {
+    "name": "Kauã Giusti"
+  }
+}
