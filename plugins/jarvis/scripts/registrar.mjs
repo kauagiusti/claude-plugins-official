@@ -8,12 +8,17 @@
  *
  *   registrar.mjs --acao email.triagem --modo autonoma --dados '{"lidos":12}'
  *   registrar.mjs --avaliar-reembolso 149
+ *   registrar.mjs --avaliar-ads 80
  *   registrar.mjs --enfileirar reembolso --dados '{"valor":120,"pedido":"#1042"}'
  *   registrar.mjs --pendencias
  *   registrar.mjs --decidir <id> --veredito aprovada --por kaua
+ *   registrar.mjs --lote aprovado --por kaua
  */
 import { registrar, verificarCadeia, lerLog } from './log.mjs'
 import { avaliarReembolso } from './limites.mjs'
+import { avaliarAds } from './ads.mjs'
+import { lotesLimposSeguidos } from './conteudo.mjs'
+import { lerConfig } from './config.mjs'
 import { decidir, enfileirar, esperando } from './pendencias.mjs'
 
 const args = process.argv.slice(2)
@@ -34,6 +39,53 @@ if (valorReembolso !== undefined) {
   const r = avaliarReembolso(Number(valorReembolso))
   console.log(JSON.stringify(r, null, 2))
   process.exit(r.permitido ? 0 : 1)
+}
+
+const valorAds = pegar('avaliar-ads')
+if (valorAds !== undefined) {
+  const r = avaliarAds(Number(valorAds))
+  console.log(JSON.stringify(r, null, 2))
+  process.exit(r.permitido ? 0 : 1)
+}
+
+// -------------------------------- conteúdo ---------------------------------
+
+/**
+ * A rampa da publicação automática só anda por aqui.
+ *
+ * Registrar o lote e ler o contador é a mesma operação de propósito: o número
+ * que libera a publicação sai do log, e o log é a única coisa que o assistente
+ * escreve mas não pode reescrever.
+ */
+const lote = pegar('lote')
+if (lote !== undefined) {
+  if (lote !== 'aprovado' && lote !== 'alterado') {
+    console.error('--lote aceita apenas "aprovado" ou "alterado"')
+    process.exit(64)
+  }
+  const por = pegar('por')
+  if (!por) {
+    console.error('--lote exige --por <quem>: aprovar lote é decisão de pessoa, não do assistente')
+    process.exit(64)
+  }
+  registrar({
+    acao: `conteudo.lote_${lote}`,
+    modo: 'confirmada',
+    confirmadoPor: por,
+    dados: pegar('dados') ? JSON.parse(pegar('dados')) : null,
+  })
+  const config = lerConfig()
+  const necessarios = config?.conteudo?.lotes_necessarios ?? 5
+  const limpos = lotesLimposSeguidos()
+  if (lote === 'alterado') {
+    console.log(`lote alterado registrado — contagem zerada (0/${necessarios})`)
+  } else {
+    console.log(`lote aprovado sem alteração — ${limpos}/${necessarios}`)
+  }
+  if (limpos >= necessarios && config?.conteudo?.publicacao_automatica_liberada !== true) {
+    console.log('a rampa fechou. falta uma pessoa virar publicacao_automatica_liberada para true na configuração.')
+  }
+  process.exit(0)
 }
 
 // ----------------------------- pendências ----------------------------------
@@ -93,9 +145,11 @@ const acao = pegar('acao')
 if (!acao) {
   console.error('uso: registrar.mjs --acao <nome> --modo <autonoma|confirmada> [--por <quem>] [--dados <json>]')
   console.error('     registrar.mjs --avaliar-reembolso <valor>')
+  console.error('     registrar.mjs --avaliar-ads <valor>')
   console.error('     registrar.mjs --enfileirar <alvo> [--dados <json>] [--prioridade P1|P2|P3]')
   console.error('     registrar.mjs --pendencias')
   console.error('     registrar.mjs --decidir <id> --veredito <aprovada|recusada> --por <quem> [--motivo <texto>]')
+  console.error('     registrar.mjs --lote <aprovado|alterado> --por <quem>')
   process.exit(64)
 }
 

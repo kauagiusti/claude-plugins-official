@@ -63,24 +63,22 @@ export function lerConfig(caminho = CAMINHO_CONFIG) {
  * `somenteLeitura` é verdadeiro enquanto qualquer capacidade que mexe no mundo
  * estiver bloqueada — é o modo que o prompt manda anunciar na primeira linha.
  */
-export function estadoDaTrava(config = lerConfig()) {
+export function estadoDaTrava(config = lerConfig(), { lotesLimpos = 0 } = {}) {
   const capacidades = {}
   for (const [nome, campos] of Object.entries(EXIGENCIAS)) {
     const faltando = campos.filter((c) => !preenchido(buscar(config, c)))
     capacidades[nome] = { liberada: faltando.length === 0, faltando }
   }
 
-  const publicacao =
-    config?.conteudo?.publicacao_automatica_liberada === true &&
-    (config?.conteudo?.lotes_aprovados_sem_alteracao ?? 0) >= (config?.conteudo?.lotes_necessarios ?? 5)
+  // A contagem de lotes NÃO vem do arquivo de configuração. Ela é derivada do
+  // log por `conteudo.mjs` e chega aqui pronta — um número que ninguém pode
+  // digitar é um número que ninguém digita errado.
+  const necessarios = config?.conteudo?.lotes_necessarios ?? 5
+  const publicacao = config?.conteudo?.publicacao_automatica_liberada === true && lotesLimpos >= necessarios
 
   capacidades.publicacao = {
     liberada: publicacao,
-    faltando: publicacao
-      ? []
-      : [
-          `conteudo.lotes_aprovados_sem_alteracao (${config?.conteudo?.lotes_aprovados_sem_alteracao ?? 0}/${config?.conteudo?.lotes_necessarios ?? 5})`,
-        ],
+    faltando: publicacao ? [] : [`lotes aprovados sem alteração (${lotesLimpos}/${necessarios})`],
   }
 
   const todasFaltas = Object.values(capacidades).flatMap((c) => c.faltando)

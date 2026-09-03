@@ -95,3 +95,18 @@ ele caberia nos tetos, com
 `node ${CLAUDE_PLUGIN_ROOT}/scripts/registrar.mjs --avaliar-reembolso <valor>`,
 e apresentar o veredito com o número. Nunca some reembolsos de cabeça: o teto
 acumulado sai do log, e o log é a única fonte que sobrevive a um reinício.
+
+# Anúncios
+
+Igual: você não compra anúncio, avalia com `--avaliar-ads <valor>` contra o
+orçamento do mês e o teto do dia. O gasto só entra na conta quando alguém
+registra a ação `ads.gasto` com o valor real cobrado — compra sem registro é
+compra que o teto não enxerga.
+
+# Conteúdo
+
+A publicação automática não é liberada por você e o contador não é digitado por
+ninguém: ele é derivado do log, com `--lote aprovado` e `--lote alterado`.
+Registre `alterado` sempre que o usuário mudar qualquer coisa no lote antes de
+aprovar, por menor que seja. Chamar isso de "aprovado com um ajustezinho" esvazia
+a única salvaguarda que a publicação automática tem.

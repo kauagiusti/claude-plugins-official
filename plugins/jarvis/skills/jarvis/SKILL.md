@@ -1,6 +1,6 @@
 ---
 name: jarvis
-description: Abre o turno operacional da loja — estado da trava, integridade do log e o que está liberado. Use quando o usuário pedir para "abrir o JARVIS", ver o estado da operação, triar e-mail de cliente, checar se um reembolso cabe nos tetos, ou registrar uma ação no log.
+description: Abre o turno operacional da loja — estado da trava, integridade do log e o que está liberado. Use quando o usuário pedir para "abrir o JARVIS", ver o estado da operação, triar e-mail de cliente, checar se um reembolso ou gasto em anúncio cabe nos tetos, ou registrar uma ação no log.
 allowed-tools: [Bash, Read, Grep, Glob]
 ---
 
@@ -45,6 +45,24 @@ quando cabe, 1 quando não.
 
 Você avalia; você não executa. O reembolso em si é do usuário.
 
+## Antes de qualquer gasto em anúncio
+
+Mesma regra, mesmo motivo — o acumulado do mês e do dia sai do log:
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/scripts/registrar.mjs --avaliar-ads 80
+```
+
+O teto do dia é o dia local do fuso configurado; o do mês é o mês de calendário,
+que é como a plataforma cobra. E o gasto **só entra na conta quando alguém
+registra** `ads.gasto` — se a compra sair sem registro, o teto não a enxerga.
+Registre logo depois de a compra ser confirmada, com o valor real cobrado:
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/scripts/registrar.mjs \
+  --acao ads.gasto --modo confirmada --por kaua --dados '{"valor":80,"campanha":"..."}'
+```
+
 ## Registrar o que você fez
 
 ```bash
@@ -73,6 +91,23 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/registrar.mjs --pendencias
 
 Sempre liste as pendências abertas na abertura do turno, com o tempo de espera.
 Pendência esquecida na fila é pior que pendência recusada.
+
+## A rampa da publicação automática
+
+Não conte lotes de cabeça e não peça o número ao usuário — ele é derivado do log:
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/scripts/registrar.mjs --lote aprovado --por kaua
+node ${CLAUDE_PLUGIN_ROOT}/scripts/registrar.mjs --lote alterado --por kaua
+```
+
+Registre `alterado` sempre que o usuário mudar **qualquer coisa** no lote antes
+de aprovar, por menor que seja — a contagem zera, e é assim que a rampa mede o
+que devia medir. Arredondar isso para "aprovado com um ajustezinho" esvazia a
+única salvaguarda que a publicação automática tem.
+
+Mesmo com a rampa fechada, a publicação continua bloqueada até uma pessoa virar
+`publicacao_automatica_liberada` para `true`. Você não edita esse campo.
 
 ## Escalonamento
 
@@ -109,7 +144,7 @@ novo para confirmar o que abriu.
 ## Rodar os testes
 
 ```bash
-node --test ${CLAUDE_PLUGIN_ROOT}/scripts/testes.mjs   # 35 testes
+node --test ${CLAUDE_PLUGIN_ROOT}/scripts/testes.mjs   # 47 testes
 ```
 
 Este código autoriza dinheiro e decide quem é acordado. Se você mexer nos limites ou no log, rode.

@@ -17,6 +17,8 @@ import { estadoDaTrava, offsetMinutos } from './config.mjs'
 import { verificarCadeia } from './log.mjs'
 import { avaliarReembolso, reembolsosGastos } from './limites.mjs'
 import { agregar, dentroDoSilencio, notificadosNaUltimaHora, planejarNotificacao } from './escalonamento.mjs'
+import { avaliarAds, gastoEmAds } from './ads.mjs'
+import { lotesLimposSeguidos, estadoDaRampa } from './conteudo.mjs'
 
 const CHEIA = {
   dinheiro: {
@@ -37,7 +39,7 @@ const CHEIA = {
     exemplos_p1: ['pagamento fora do ar'],
     exemplos_p2: ['cliente pedindo troca'],
   },
-  conteudo: { publicacao_automatica_liberada: false, lotes_aprovados_sem_alteracao: 0, lotes_necessarios: 5 },
+  conteudo: { publicacao_automatica_liberada: false, lotes_necessarios: 5 },
 }
 
 const clone = (o) => JSON.parse(JSON.stringify(o))
@@ -83,17 +85,14 @@ test('zero e string vazia não contam como preenchido', () => {
 })
 
 test('publicação só abre com os cinco lotes aprovados', () => {
-  const quase = clone(CHEIA)
-  quase.conteudo = { publicacao_automatica_liberada: true, lotes_aprovados_sem_alteracao: 4, lotes_necessarios: 5 }
-  assert.equal(estadoDaTrava(quase).capacidades.publicacao.liberada, false)
+  const ligada = clone(CHEIA)
+  ligada.conteudo = { publicacao_automatica_liberada: true, lotes_necessarios: 5 }
 
-  quase.conteudo.lotes_aprovados_sem_alteracao = 5
-  assert.equal(estadoDaTrava(quase).capacidades.publicacao.liberada, true)
+  assert.equal(estadoDaTrava(ligada, { lotesLimpos: 4 }).capacidades.publicacao.liberada, false)
+  assert.equal(estadoDaTrava(ligada, { lotesLimpos: 5 }).capacidades.publicacao.liberada, true)
 
-  // Marcar como liberada sem os lotes não vale — as duas condições valem juntas.
-  const forcada = clone(CHEIA)
-  forcada.conteudo = { publicacao_automatica_liberada: true, lotes_aprovados_sem_alteracao: 0, lotes_necessarios: 5 }
-  assert.equal(estadoDaTrava(forcada).capacidades.publicacao.liberada, false)
+  // As duas condições valem juntas: lotes sem o interruptor não abre.
+  assert.equal(estadoDaTrava(CHEIA, { lotesLimpos: 9 }).capacidades.publicacao.liberada, false)
 })
 
 test('fuso ausente cai em Brasília, não em UTC', () => {
@@ -465,4 +464,114 @@ test('esperando mostra há quanto tempo cada pendência aguarda', async () => {
     assert.equal(fila.length, 1)
     assert.ok(fila[0].minutosEsperando >= 89, `esperou ${fila[0].minutosEsperando} min`)
   })
+})
+
+// ---------------------------------------------------------------------------
+// Orçamento de anúncios
+// ---------------------------------------------------------------------------
+
+const gastoAds = (valor, minutosAtras) => ({
+  acao: 'ads.gasto',
+  em: new Date(Date.now() - minutosAtras * 60000).toISOString(),
+  dados: { valor },
+})
+
+test('sem config, nenhum gasto em anúncio passa', () => {
+  const r = avaliarAds(10, { config: { dinheiro: { moeda: '____' } }, registros: [] })
+  assert.equal(r.permitido, false)
+  assert.match(r.motivo, /trava/)
+})
+
+test('o teto do dia de anúncios barra o acumulado', () => {
+  // O buraco que existia: config preenchida deixava `anuncios` liberada e nada
+  // somava gasto nenhum.
+  const registros = [gastoAds(40, 120), gastoAds(15, 60)]
+  const r = avaliarAds(10, { config: CHEIA, registros })
+  assert.equal(r.permitido, false)
+  assert.match(r.motivo, /teto do dia/)
+  assert.equal(r.gastos.dia, 55)
+})
+
+test('o orçamento do mês barra mesmo com o dia limpo', () => {
+  // Instantes fixos, não "N dias atrás": num dia 3, "5 dias atrás" cai no mês
+  // anterior e o teste passa a testar outra coisa — que foi exatamente o que
+  // aconteceu na primeira versão disto.
+  const agora = new Date('2026-09-20T15:00:00Z')
+  const registros = [{ acao: 'ads.gasto', em: '2026-09-15T13:00:00Z', dados: { valor: 880 } }]
+  const r = avaliarAds(50, { config: CHEIA, registros, agora })
+  assert.equal(r.permitido, false)
+  assert.match(r.motivo, /mês/)
+  assert.equal(r.gastos.mes, 880)
+  assert.equal(r.gastos.dia, 0)
+})
+
+test('gasto do mês passado não conta no mês atual', () => {
+  const agora = new Date('2026-09-03T15:00:00Z')
+  const registros = [{ acao: 'ads.gasto', em: '2026-08-29T13:00:00Z', dados: { valor: 880 } }]
+  const r = avaliarAds(50, { config: CHEIA, registros, agora })
+  assert.equal(r.permitido, true)
+  assert.equal(r.gastos.mes, 0)
+})
+
+test('gasto em anúncio dentro dos tetos passa, com aviso aos 80%', () => {
+  const r = avaliarAds(10, { config: CHEIA, registros: [gastoAds(40, 30)] })
+  assert.equal(r.permitido, true)
+  assert.ok(r.avisos.some((a) => /teto do dia/.test(a)), JSON.stringify(r.avisos))
+})
+
+test('só ads.gasto entra na conta de anúncios', () => {
+  const registros = [
+    { acao: 'ads.avaliado', em: new Date().toISOString(), dados: { valor: 500 } },
+    gastoAds(20, 10),
+  ]
+  assert.equal(gastoEmAds(new Date(), CHEIA, registros).dia, 20)
+})
+
+test('valor inválido de anúncio é recusado', () => {
+  for (const v of [0, -5, NaN, undefined]) {
+    assert.equal(avaliarAds(v, { config: CHEIA, registros: [] }).permitido, false)
+  }
+})
+
+// ---------------------------------------------------------------------------
+// Rampa de conteúdo
+// ---------------------------------------------------------------------------
+
+const lote = (acao) => ({ acao, em: new Date().toISOString(), dados: {} })
+
+test('a contagem de lotes é derivada do log, não digitada', () => {
+  const registros = ['conteudo.lote_aprovado', 'conteudo.lote_aprovado', 'conteudo.lote_aprovado'].map(lote)
+  assert.equal(lotesLimposSeguidos(registros), 3)
+})
+
+test('um lote alterado zera a contagem', () => {
+  // "Seguidos" é o ponto: cinco aprovações com uma correção no meio não são
+  // cinco lotes limpos.
+  const registros = [
+    lote('conteudo.lote_aprovado'),
+    lote('conteudo.lote_aprovado'),
+    lote('conteudo.lote_alterado'),
+    lote('conteudo.lote_aprovado'),
+  ]
+  assert.equal(lotesLimposSeguidos(registros), 1)
+})
+
+test('ações não relacionadas não interrompem nem contam', () => {
+  const registros = [
+    lote('conteudo.lote_aprovado'),
+    { acao: 'email.triagem', em: new Date().toISOString() },
+    lote('conteudo.lote_aprovado'),
+  ]
+  assert.equal(lotesLimposSeguidos(registros), 2)
+})
+
+test('a rampa fecha só no número exigido', () => {
+  const quatro = Array.from({ length: 4 }, () => lote('conteudo.lote_aprovado'))
+  assert.equal(estadoDaRampa(CHEIA, quatro).fechada, false)
+  assert.equal(estadoDaRampa(CHEIA, [...quatro, lote('conteudo.lote_aprovado')]).fechada, true)
+})
+
+test('log vazio significa zero lotes, não rampa fechada por acidente', () => {
+  assert.equal(lotesLimposSeguidos([]), 0)
+  assert.equal(estadoDaRampa(CHEIA, []).fechada, false)
 })

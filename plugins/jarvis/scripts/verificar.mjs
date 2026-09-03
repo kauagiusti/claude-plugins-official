@@ -10,11 +10,13 @@
 import { estadoDaTrava, lerConfig } from './config.mjs'
 import { verificarCadeia, lerLog } from './log.mjs'
 import { reembolsosGastos } from './limites.mjs'
+import { gastoEmAds } from './ads.mjs'
+import { lotesLimposSeguidos } from './conteudo.mjs'
 
 const config = lerConfig()
-const trava = estadoDaTrava(config)
 const cadeia = verificarCadeia()
 const registros = lerLog()
+const trava = estadoDaTrava(config, { lotesLimpos: lotesLimposSeguidos(registros) })
 
 const jsonPuro = process.argv.includes('--json')
 if (jsonPuro) {
@@ -34,9 +36,15 @@ for (const [nome, c] of Object.entries(trava.capacidades)) {
 }
 
 if (trava.capacidades.reembolso.liberada) {
-  const g = reembolsosGastos()
+  const g = reembolsosGastos(new Date(), config, registros)
   const m = config.dinheiro.moeda
   console.log(`\n  reembolsos: ${m} ${g.dia.toFixed(2)} hoje · ${m} ${g.semana.toFixed(2)} nos últimos 7 dias`)
+}
+
+if (trava.capacidades.anuncios.liberada) {
+  const a = gastoEmAds(new Date(), config, registros)
+  const m = config.dinheiro.moeda
+  console.log(`  anúncios:   ${m} ${a.dia.toFixed(2)} hoje · ${m} ${a.mes.toFixed(2)} no mês`)
 }
 
 console.log('\n  integrações: verifique na sessão — este script não alcança as ferramentas.\n')

@@ -5,16 +5,18 @@ autonomia é ordenada por reversibilidade, não por valor** — um reembolso de
 R$ 300 se estorna em um clique; um vídeo ruim publicado já foi baixado, printado
 e repostado.
 
-O que distingue este plugin de um prompt bem escrito é que as três regras que
-mais custam caro quando falham estão em código, não em texto:
+O que distingue este plugin de um prompt bem escrito é que as regras que mais
+custam caro quando falham estão em código, não em texto:
 
 | Regra | Onde vive | O que acontece se o modelo esquecer |
 |---|---|---|
 | Trava de configuração | `scripts/config.mjs` | Nada. A capacidade continua bloqueada. |
 | Tetos acumulados de reembolso | `scripts/limites.mjs` | Nada. O cálculo sai do log, não da memória. |
+| Orçamento de anúncios | `scripts/ads.mjs` | Nada. O gasto do mês e do dia sai do log. |
 | Log inviolável | `scripts/log.mjs` | A cadeia de hash quebra e a verificação denuncia. |
 | Agregação e janela de silêncio | `scripts/escalonamento.mjs` | Nada. Cinquenta falhas continuam sendo um alerta. |
 | Fila de aprovação do Nível 3 | `scripts/pendencias.mjs` | Nada. A fila sai do log, não de um arquivo à parte. |
+| Rampa da publicação automática | `scripts/conteudo.mjs` | Nada. O contador é derivado do log, não digitado. |
 
 Um limite que só existe no prompt depende do modelo lembrar dele — e a hora em
 que ele mais precisa lembrar é justamente a hora em que alguém está pedindo com
@@ -30,12 +32,14 @@ jarvis/
 ├── scripts/
 │   ├── config.mjs              lê a config e decide o que está liberado
 │   ├── limites.mjs             tetos por pedido, por dia e por semana corrida
+│   ├── ads.mjs                 orçamento do mês e teto do dia, somados do log
+│   ├── conteudo.mjs            a rampa: lotes aprovados sem alteração, seguidos
 │   ├── log.mjs                 append-only com cadeia de hash
 │   ├── escalonamento.mjs       agregação, janela de silêncio, teto/hora, escada
 │   ├── pendencias.mjs          fila de aprovação, derivada do log
 │   ├── verificar.mjs           a linha de abertura exigida pelo prompt
-│   ├── registrar.mjs           CLI de registro e de avaliação de reembolso
-│   └── testes.mjs              35 testes do que decide dinheiro e quem é acordado
+│   ├── registrar.mjs           CLI de registro, de avaliação e da rampa
+│   └── testes.mjs              47 testes do que decide dinheiro e quem é acordado
 └── log/acoes.jsonl             o registro (fora do git — é dado da operação)
 ```
 
@@ -43,7 +47,7 @@ jarvis/
 
 ```bash
 node scripts/verificar.mjs          # o que está travado e por quê
-node --test scripts/testes.mjs      # 35 testes
+node --test scripts/testes.mjs      # 47 testes
 ```
 
 Na primeira execução tudo está bloqueado, e isso é o comportamento correto:
@@ -63,7 +67,7 @@ coisa só para destravar o resto — que é exatamente como um limite vira ficç
 | `anuncios` | moeda + orçamento do mês + teto do dia |
 | `escalonamento` | fuso, janela de silêncio, e-mail, exemplos de P1 e P2 |
 | `ligacao` | telefone de emergência |
-| `publicacao` | 5 lotes aprovados sem nenhuma alteração |
+| `publicacao` | 5 lotes aprovados sem nenhuma alteração **e** a liberação na config |
 
 ## Os tetos de reembolso
 
@@ -85,6 +89,53 @@ $ node scripts/registrar.mjs --avaliar-reembolso 149
 
 Sempre com o número. "Negado" sozinho faz a pessoa insistir; "negado, faltam
 R$ 102" faz ela decidir.
+
+## O orçamento de anúncios
+
+Mesma forma do reembolso, por um motivo específico: até a versão anterior os dois
+campos existiam na configuração e **nenhum código somava gasto nenhum**.
+Preencher os campos deixava a capacidade `anuncios` liberada e completamente
+desprotegida — a pior falha possível, a que parece segurança.
+
+Agora o gasto sai do log, como o reembolso, e vale nas duas janelas:
+
+```bash
+$ node scripts/registrar.mjs --avaliar-ads 80
+{
+  "permitido": false,
+  "motivo": "estoura o teto do dia — já saíram BRL 40.00 de BRL 100.00",
+  "gastos": { "dia": 40, "mes": 620 }
+}
+```
+
+O teto do dia usa o dia local do fuso configurado; o do mês usa o **mês de
+calendário**, porque orçamento de anúncio vira no dia 1. É o inverso da escolha
+do reembolso — lá a janela é corrida justamente para não criar a segunda-feira em
+que tudo é permitido de novo; aqui o mês de calendário é o que a plataforma de
+anúncios cobra, e um mês corrido divergiria da fatura.
+
+Só registros com ação `ads.gasto` e valor positivo entram na conta.
+
+## A rampa da publicação automática
+
+O contador de lotes vivia como um número no arquivo de configuração, e nada o
+incrementava nem o zerava. Alguém digitava `5` e a publicação automática abria —
+a rampa era decoração. O campo foi **removido da configuração**: número que
+ninguém pode digitar é número que ninguém digita errado.
+
+A contagem varre o log de trás para frente e para no primeiro lote alterado.
+"Seguidos" é o ponto — cinco aprovações com uma correção no meio não são cinco
+lotes limpos.
+
+```bash
+node scripts/registrar.mjs --lote aprovado --por kaua   # 3/5
+node scripts/registrar.mjs --lote alterado --por kaua   # contagem zerada (0/5)
+```
+
+`--por` é obrigatório: aprovar lote é decisão de pessoa, não do assistente.
+E mesmo com a rampa fechada, a publicação só abre quando alguém virar
+`publicacao_automatica_liberada` para `true` — a rampa é condição necessária,
+não suficiente.
 
 ## O log
 
@@ -165,4 +216,7 @@ não como se você tivesse mudado de ideia.
 - **A cadeia de hash é à prova de adulteração silenciosa, não de adulteração.**
   Quem controla o arquivo pode reescrever a cadeia inteira. Para além disso,
   o log precisa sair da máquina — append-only remoto ou storage com retenção.
-- **O agente não executa reembolso.** Ele avalia e apresenta. A execução é sua.
+- **O agente não executa reembolso nem compra anúncio.** Ele avalia contra os
+  tetos e apresenta o número. A execução é sua, e o gasto só entra na conta
+  quando alguém registra `ads.gasto` — se a compra não for registrada, o teto
+  não a enxerga.

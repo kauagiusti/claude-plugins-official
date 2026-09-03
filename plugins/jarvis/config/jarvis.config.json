@@ -21,9 +21,9 @@
     "exemplos_p2": []
   },
 
+  "_conteudo": "lotes_aprovados_sem_alteracao saiu daqui de proposito: e derivado do log, nao digitado",
   "conteudo": {
     "publicacao_automatica_liberada": false,
-    "lotes_aprovados_sem_alteracao": 0,
     "lotes_necessarios": 5
   },
 
