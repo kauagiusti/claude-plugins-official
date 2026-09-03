@@ -16,6 +16,7 @@ import { join } from 'node:path'
 import { estadoDaTrava, offsetMinutos } from './config.mjs'
 import { verificarCadeia } from './log.mjs'
 import { avaliarReembolso, reembolsosGastos } from './limites.mjs'
+import { agregar, dentroDoSilencio, notificadosNaUltimaHora, planejarNotificacao } from './escalonamento.mjs'
 
 const CHEIA = {
   dinheiro: {
@@ -223,4 +224,245 @@ test('o módulo de log não expõe como apagar', async () => {
 
 test('log vazio é uma cadeia íntegra, não um erro', () => {
   assert.deepEqual(verificarCadeia([]), { intacta: true, registros: 0 })
+})
+
+// ---------------------------------------------------------------------------
+// Escalonamento
+// ---------------------------------------------------------------------------
+
+const ESC = {
+  escalonamento: {
+    fuso_horario_utc_offset: -3,
+    janela_silencio: { de: '22:00', ate: '07:00' },
+    categorias_que_furam_silencio: [],
+    max_escalonamentos_por_hora: 3,
+    telefone_emergencia: '+5511999999999',
+    email_escalonamento: 'kaua@exemplo.com',
+    exemplos_p1: ['pagamento fora do ar'],
+    exemplos_p2: ['pedido de troca'],
+  },
+}
+
+/**
+ * Instante em UTC correspondente a uma hora local de Brasília (-03).
+ *
+ * Via Date.UTC, e não concatenando string: somar 3 às 23 horas dá "26:00", que
+ * é uma data inválida e faz o teste passar por engano quando devia falhar.
+ */
+const emBrasilia = (hhmm) => {
+  const [h, m] = hhmm.split(':').map(Number)
+  return new Date(Date.UTC(2026, 8, 3, h, m) + 3 * 3600 * 1000)
+}
+
+const notificado = (causa, minutosAtras) => ({
+  acao: 'escalonamento.notificado',
+  em: new Date(Date.now() - minutosAtras * 60000).toISOString(),
+  dados: { causa },
+})
+
+test('a janela de silêncio funciona atravessando a meia-noite', () => {
+  // Comparação ingênua faria 22:00–07:00 nunca valer, e a janela deixaria de
+  // existir sem ninguém notar até a primeira ligação de madrugada.
+  assert.equal(dentroDoSilencio(emBrasilia('00:30'), ESC), true)
+  assert.equal(dentroDoSilencio(emBrasilia('23:00'), ESC), true)
+  assert.equal(dentroDoSilencio(emBrasilia('06:59'), ESC), true)
+  assert.equal(dentroDoSilencio(emBrasilia('07:00'), ESC), false)
+  assert.equal(dentroDoSilencio(emBrasilia('12:00'), ESC), false)
+  assert.equal(dentroDoSilencio(emBrasilia('21:59'), ESC), false)
+})
+
+test('janela que não atravessa a meia-noite também vale', () => {
+  const diurna = { escalonamento: { ...ESC.escalonamento, janela_silencio: { de: '13:00', ate: '14:00' } } }
+  assert.equal(dentroDoSilencio(emBrasilia('13:30'), diurna), true)
+  assert.equal(dentroDoSilencio(emBrasilia('12:30'), diurna), false)
+  assert.equal(dentroDoSilencio(emBrasilia('14:00'), diurna), false)
+})
+
+test('janela ausente ou degenerada não silencia nada', () => {
+  assert.equal(dentroDoSilencio(new Date(), { escalonamento: {} }), false)
+  const vazia = { escalonamento: { janela_silencio: { de: '____', ate: '____' } } }
+  assert.equal(dentroDoSilencio(new Date(), vazia), false)
+  const igual = { escalonamento: { janela_silencio: { de: '08:00', ate: '08:00' } } }
+  assert.equal(dentroDoSilencio(new Date(), igual), false)
+})
+
+test('agregação junta por causa e herda a pior prioridade', () => {
+  const grupos = agregar([
+    { causa: 'pagamento-recusado', afetado: '#1', prioridade: 'P2' },
+    { causa: 'pagamento-recusado', afetado: '#2', prioridade: 'P1' },
+    { causa: 'pagamento-recusado', afetado: '#3', prioridade: 'P2' },
+    { causa: 'estoque-zerado', afetado: 'SKU-9', prioridade: 'P2' },
+  ])
+  assert.equal(grupos.length, 2)
+  assert.equal(grupos[0].causa, 'pagamento-recusado')
+  assert.equal(grupos[0].ocorrencias, 3)
+  assert.equal(grupos[0].prioridade, 'P1')
+})
+
+test('cinquenta pedidos travados são um alerta, não cinquenta', () => {
+  const eventos = Array.from({ length: 50 }, (_, i) => ({
+    causa: 'gateway-fora',
+    afetado: `#${1000 + i}`,
+    prioridade: 'P1',
+  }))
+  const grupos = agregar(eventos)
+  assert.equal(grupos.length, 1)
+  assert.equal(grupos[0].ocorrencias, 50)
+})
+
+test('P3 nunca notifica', () => {
+  const p = planejarNotificacao({ causa: 'x', prioridade: 'P3' }, { config: ESC, registros: [] })
+  assert.equal(p.notificar, false)
+  assert.match(p.motivo, /P3/)
+})
+
+test('sem exemplos de P1 e P2, P1 é rebaixado', () => {
+  // Na ausência de critério, ninguém é acordado.
+  const semExemplos = { escalonamento: { ...ESC.escalonamento, exemplos_p1: [], exemplos_p2: [] } }
+  const p = planejarNotificacao(
+    { causa: 'x', prioridade: 'P1' },
+    { config: semExemplos, registros: [], minutosDesdeAbertura: 30, agora: emBrasilia('12:00') },
+  )
+  assert.equal(p.prioridade, 'P2')
+  assert.equal(p.rebaixado, true)
+  // Rebaixado para P2, o degrau de 30 min é push, nunca ligação.
+  assert.equal(p.canal, 'push')
+})
+
+test('a escada sobe com o tempo, e só P1 chega ao telefone', () => {
+  const plano = (min, prioridade) =>
+    planejarNotificacao(
+      { causa: `c${min}${prioridade}`, prioridade },
+      { config: ESC, registros: [], minutosDesdeAbertura: min, agora: emBrasilia('12:00') },
+    )
+  assert.equal(plano(0, 'P1').canal, 'push+email')
+  assert.equal(plano(6, 'P1').canal, 'push')
+  assert.equal(plano(21, 'P1').canal, 'sms')
+  assert.equal(plano(31, 'P1').canal, 'ligacao')
+
+  assert.equal(plano(21, 'P2').canal, 'push')
+  assert.equal(plano(600, 'P2').canal, 'push')
+})
+
+test('a mesma causa não é notificada duas vezes em 15 minutos', () => {
+  const p = planejarNotificacao(
+    { causa: 'gateway-fora', prioridade: 'P1' },
+    { config: ESC, registros: [notificado('gateway-fora', 3)], minutosDesdeAbertura: 30, agora: emBrasilia('12:00') },
+  )
+  assert.equal(p.notificar, false)
+  assert.match(p.motivo, /15 minutos/)
+})
+
+test('teto por hora manda para o resumo consolidado', () => {
+  const registros = ['a', 'b', 'c'].map((c) => notificado(c, 10))
+  const p = planejarNotificacao(
+    { causa: 'nova', prioridade: 'P1' },
+    { config: ESC, registros, minutosDesdeAbertura: 0, agora: emBrasilia('12:00') },
+  )
+  assert.equal(p.notificar, false)
+  assert.equal(p.consolidar, true)
+  assert.equal(notificadosNaUltimaHora(new Date(), registros), 3)
+})
+
+test('a janela de silêncio adia, e a lista de exceções fura', () => {
+  const adiado = planejarNotificacao(
+    { causa: 'gateway-fora', prioridade: 'P1' },
+    { config: ESC, registros: [], minutosDesdeAbertura: 30, agora: emBrasilia('03:00') },
+  )
+  assert.equal(adiado.notificar, false)
+  assert.equal(adiado.adiado, true)
+
+  const comExcecao = { escalonamento: { ...ESC.escalonamento, categorias_que_furam_silencio: ['gateway-fora'] } }
+  const fura = planejarNotificacao(
+    { causa: 'gateway-fora', prioridade: 'P1' },
+    { config: comExcecao, registros: [], minutosDesdeAbertura: 30, agora: emBrasilia('03:00') },
+  )
+  assert.equal(fura.notificar, true)
+  assert.equal(fura.canal, 'ligacao')
+})
+
+test('degrau de telefone sem telefone cai para push+email, não promete ligação', () => {
+  // Prometer ligação sem canal é a pior forma de falhar: silenciosa.
+  const semTelefone = { escalonamento: { ...ESC.escalonamento, telefone_emergencia: '____' } }
+  const p = planejarNotificacao(
+    { causa: 'x', prioridade: 'P1' },
+    { config: semTelefone, registros: [], minutosDesdeAbertura: 31, agora: emBrasilia('12:00') },
+  )
+  assert.equal(p.notificar, true)
+  assert.equal(p.canal, 'push+email')
+  assert.match(p.motivo, /telefone/)
+})
+
+// ---------------------------------------------------------------------------
+// Fila de aprovação
+// ---------------------------------------------------------------------------
+
+test('pendência entra na fila e sai quando decidida', async () => {
+  const { enfileirar, listar, decidir } = await import('./pendencias.mjs')
+  const { lerLog } = await import('./log.mjs')
+  comLogTemporario((caminho) => {
+    const id = enfileirar({ alvo: 'publicacao', dados: { plataforma: 'tiktok' } }, caminho)
+    assert.equal(listar(lerLog(caminho)).length, 1)
+
+    decidir(id, 'aprovada', 'kaua', { registros: lerLog(caminho), config: CHEIA, caminho })
+    assert.equal(listar(lerLog(caminho)).length, 0)
+
+    // O histórico continua no log: fila vazia não é fila apagada.
+    const decisoes = lerLog(caminho).filter((r) => r.acao === 'pendencia.decidida')
+    assert.equal(decisoes.length, 1)
+    assert.equal(decisoes[0].confirmadoPor, 'kaua')
+  })
+})
+
+test('decidir exige quem decidiu, veredito válido e pendência aberta', async () => {
+  const { enfileirar, decidir } = await import('./pendencias.mjs')
+  const { lerLog } = await import('./log.mjs')
+  comLogTemporario((caminho) => {
+    const id = enfileirar({ alvo: 'publicacao' }, caminho)
+    const registros = lerLog(caminho)
+    assert.throws(() => decidir(id, 'aprovada', '', { registros, caminho }), /quem decidiu/)
+    assert.throws(() => decidir(id, 'talvez', 'kaua', { registros, caminho }), /aprovada/)
+    assert.throws(() => decidir('naoexiste', 'aprovada', 'kaua', { registros, caminho }), /não está aberta/)
+  })
+})
+
+test('reembolso é reavaliado na hora da aprovação, não do pedido', async () => {
+  const { enfileirar, decidir, listar } = await import('./pendencias.mjs')
+  const { lerLog } = await import('./log.mjs')
+  comLogTemporario((caminho) => {
+    const id = enfileirar({ alvo: 'reembolso', dados: { valor: 140, pedido: '#1042' } }, caminho)
+
+    // Entre pedir e aprovar, saíram outros reembolsos e o teto do dia encheu.
+    const registros = [...lerLog(caminho), reembolso(149, 30), reembolso(149, 20)]
+    const r = decidir(id, 'aprovada', 'kaua', { registros, config: CHEIA, caminho })
+
+    assert.equal(r.veredito, 'recusada')
+    assert.equal(r.bloqueadoPeloTeto, true)
+    assert.equal(listar(lerLog(caminho)).length, 0)
+
+    // A recusa é do teto, não de quem aprovou — e o log diz isso.
+    const decisao = lerLog(caminho).find((x) => x.acao === 'pendencia.decidida')
+    assert.match(decisao.dados.motivo, /bloqueado pelo teto/)
+  })
+})
+
+test('reembolso dentro dos tetos é aprovado', async () => {
+  const { enfileirar, decidir } = await import('./pendencias.mjs')
+  const { lerLog } = await import('./log.mjs')
+  comLogTemporario((caminho) => {
+    const id = enfileirar({ alvo: 'reembolso', dados: { valor: 90 } }, caminho)
+    const r = decidir(id, 'aprovada', 'kaua', { registros: lerLog(caminho), config: CHEIA, caminho })
+    assert.equal(r.veredito, 'aprovada')
+  })
+})
+
+test('esperando mostra há quanto tempo cada pendência aguarda', async () => {
+  const { enfileirar, esperando } = await import('./pendencias.mjs')
+  const { lerLog } = await import('./log.mjs')
+  comLogTemporario((caminho) => {
+    enfileirar({ alvo: 'reembolso', dados: { valor: 50 } }, caminho)
+    const fila = esperando(new Date(Date.now() + 90 * 60000), lerLog(caminho))
+    assert.equal(fila.length, 1)
+    assert.ok(fila[0].minutosEsperando >= 89, `esperou ${fila[0].minutosEsperando} min`)
+  })
 })

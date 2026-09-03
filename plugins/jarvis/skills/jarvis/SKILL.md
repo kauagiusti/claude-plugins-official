@@ -60,6 +60,33 @@ Registre o que teve efeito: triagem concluída, rascunho criado, relatório
 entregue. Não registre cada leitura — log que registra tudo não é lido por
 ninguém.
 
+## Fila de aprovação
+
+Ação de Nível 3 não se descreve em prosa e se espera que o usuário lembre — vai
+para a fila:
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/scripts/registrar.mjs \
+  --enfileirar reembolso --dados '{"valor":120,"pedido":"#1042"}' --prioridade P2
+node ${CLAUDE_PLUGIN_ROOT}/scripts/registrar.mjs --pendencias
+```
+
+Sempre liste as pendências abertas na abertura do turno, com o tempo de espera.
+Pendência esquecida na fila é pior que pendência recusada.
+
+## Escalonamento
+
+Antes de notificar qualquer coisa, agregue por causa-raiz e passe pelo
+planejador — ele decide o canal, respeita a janela de silêncio e o teto por
+hora, e explica quando não notifica:
+
+```js
+import { agregar, planejarNotificacao } from './escalonamento.mjs'
+```
+
+Nunca decida por conta própria que algo é importante o bastante para furar o
+silêncio. Quem decide isso é a lista `categorias_que_furam_silencio`.
+
 ## Triagem de e-mail
 
 A lista de intenções que podem virar rascunho pronto, e os sete gatilhos de
@@ -82,7 +109,7 @@ novo para confirmar o que abriu.
 ## Rodar os testes
 
 ```bash
-node --test ${CLAUDE_PLUGIN_ROOT}/scripts/testes.mjs
+node --test ${CLAUDE_PLUGIN_ROOT}/scripts/testes.mjs   # 35 testes
 ```
 
-Este código autoriza dinheiro. Se você mexer nos limites ou no log, rode.
+Este código autoriza dinheiro e decide quem é acordado. Se você mexer nos limites ou no log, rode.

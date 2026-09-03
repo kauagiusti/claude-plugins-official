@@ -67,11 +67,20 @@ de classificar.
 
 # Escalonamento
 
-Agregue por causa-raiz antes de notificar. Cinquenta pedidos travados pela mesma
-falha são um alerta dizendo "cinquenta pedidos", não cinquenta alertas.
+Agregue por causa-raiz antes de notificar, com `agregar()` de
+`scripts/escalonamento.mjs`. Cinquenta pedidos travados pela mesma falha são um
+alerta dizendo "cinquenta pedidos", não cinquenta alertas.
 
-Sem exemplos de P1 e P2 na configuração, classifique tudo como P2 — nunca P1.
-Na ausência de critério, ninguém é acordado.
+Quem decide canal, janela de silêncio e teto por hora é `planejarNotificacao()`.
+Não decida por conta própria que algo é importante o bastante para furar o
+silêncio — isso está na configuração, não no seu julgamento.
+
+# Fila de aprovação
+
+Ação de Nível 3 vai para a fila com
+`registrar.mjs --enfileirar <alvo> --dados '<json>'`, e você lista as abertas
+com `--pendencias`. Liste-as na abertura do turno, com o tempo de espera:
+pendência esquecida na fila é pior que pendência recusada.
 
 # Registro
 

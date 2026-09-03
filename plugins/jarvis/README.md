@@ -13,6 +13,8 @@ mais custam caro quando falham estão em código, não em texto:
 | Trava de configuração | `scripts/config.mjs` | Nada. A capacidade continua bloqueada. |
 | Tetos acumulados de reembolso | `scripts/limites.mjs` | Nada. O cálculo sai do log, não da memória. |
 | Log inviolável | `scripts/log.mjs` | A cadeia de hash quebra e a verificação denuncia. |
+| Agregação e janela de silêncio | `scripts/escalonamento.mjs` | Nada. Cinquenta falhas continuam sendo um alerta. |
+| Fila de aprovação do Nível 3 | `scripts/pendencias.mjs` | Nada. A fila sai do log, não de um arquivo à parte. |
 
 Um limite que só existe no prompt depende do modelo lembrar dele — e a hora em
 que ele mais precisa lembrar é justamente a hora em que alguém está pedindo com
@@ -29,9 +31,11 @@ jarvis/
 │   ├── config.mjs              lê a config e decide o que está liberado
 │   ├── limites.mjs             tetos por pedido, por dia e por semana corrida
 │   ├── log.mjs                 append-only com cadeia de hash
+│   ├── escalonamento.mjs       agregação, janela de silêncio, teto/hora, escada
+│   ├── pendencias.mjs          fila de aprovação, derivada do log
 │   ├── verificar.mjs           a linha de abertura exigida pelo prompt
 │   ├── registrar.mjs           CLI de registro e de avaliação de reembolso
-│   └── testes.mjs              18 testes do que decide dinheiro
+│   └── testes.mjs              35 testes do que decide dinheiro e quem é acordado
 └── log/acoes.jsonl             o registro (fora do git — é dado da operação)
 ```
 
@@ -39,7 +43,7 @@ jarvis/
 
 ```bash
 node scripts/verificar.mjs          # o que está travado e por quê
-node --test scripts/testes.mjs      # 18 testes
+node --test scripts/testes.mjs      # 35 testes
 ```
 
 Na primeira execução tudo está bloqueado, e isso é o comportamento correto:
@@ -97,6 +101,60 @@ apagou uma linha    → {"intacta":false,"linha":2,"motivo":"elo anterior não c
 
 O módulo não exporta nenhuma função de apagar ou editar, e há um teste que
 verifica isso: o que não tem API não é chamado por engano.
+
+## O escalonamento
+
+Três regras que só existiam como texto no prompt agora são código, porque texto
+não segura cinquenta ligações às três da manhã.
+
+**Agregação por causa-raiz.** Cinquenta pedidos travados pela mesma falha de
+pagamento são um alerta dizendo "cinquenta pedidos". Sem isso, um bug de
+integração vira negação de serviço contra o próprio dono da loja.
+
+**Janela de silêncio que atravessa a meia-noite.** "22:00 às 07:00" quebra numa
+comparação ingênua — `22*60 <= agora && agora < 7*60` nunca é verdade, e a
+janela deixaria de existir sem ninguém notar até a primeira ligação de
+madrugada. Só as categorias listadas em `categorias_que_furam_silencio` passam;
+lista vazia significa que nada fura.
+
+**Escada gradual.** O rascunho saltava de "notificou" para "ligação" em cinco
+minutos, o que transforma qualquer reunião de meia hora numa ligação perdida.
+
+| Momento | Canal | Vale para |
+|---|---|---|
+| imediato | push + e-mail | P1 e P2 |
+| +5 min | push | P1 e P2 |
+| +20 min | SMS | só P1 |
+| +30 min | ligação | só P1 |
+
+P2 repete o push em 1 hora e depois uma vez por dia. P3 não notifica.
+
+Duas travas a mais: a mesma causa não é notificada duas vezes em 15 minutos, e
+o teto por hora manda o excedente para um resumo consolidado — alerta ignorado
+por excesso é pior que nenhum. E um degrau de SMS ou ligação sem telefone
+configurado **cai para push+e-mail** em vez de prometer uma ligação que não vai
+acontecer: prometer canal inexistente é a pior forma de falhar, a silenciosa.
+
+Sem exemplos de P1 e P2 na configuração, todo P1 é rebaixado a P2. Na ausência
+de critério, ninguém é acordado.
+
+## A fila de aprovação
+
+Ações de Nível 3 entram numa fila e esperam. A fila é **derivada do log**, não
+guardada num arquivo próprio — um segundo arquivo mutável seria mais um lugar
+para o estado divergir, e poderia ser esvaziado sem deixar rastro.
+
+```bash
+node scripts/registrar.mjs --enfileirar reembolso --dados '{"valor":120,"pedido":"#1042"}'
+node scripts/registrar.mjs --pendencias
+node scripts/registrar.mjs --decidir ca38d6ea --veredito aprovada --por kaua
+```
+
+**Reembolso é reavaliado na hora da aprovação, não na hora do pedido.** Entre
+enfileirar e aprovar pode ter passado meio dia e podem ter saído outros
+reembolsos; aprovar com a conta velha é como o teto acumulado deixa de valer sem
+ninguém mexer nele. Quando o teto barra, o log registra "bloqueado pelo teto" —
+não como se você tivesse mudado de ideia.
 
 ## Limites conhecidos
 
