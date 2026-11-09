@@ -17,6 +17,7 @@ export default function Ajustes() {
 
   const [pesoNovo, setPesoNovo] = useState('')
   const [confirmarReset, setConfirmarReset] = useState(false)
+  const [backupNaTela, setBackupNaTela] = useState('')
 
   const metas = useMemo(() => calcularMetas(perfil), [perfil])
   const manutencao = useMemo(() => Math.round(tdee(perfil)), [perfil])
@@ -32,7 +33,19 @@ export default function Ajustes() {
       pesos: estado.pesos,
       jogo: estado.jogo,
     }
-    const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' })
+    const texto = JSON.stringify(dump, null, 2)
+
+    // O visualizador de pré-visualização não deixa a página entregar arquivo:
+    // o link de download simplesmente não faz nada, sem erro nenhum. Um botão
+    // que não reage é pior que um botão ausente — aqui o backup aparece na
+    // tela para copiar.
+    if (import.meta.env.VITE_PREVIEW_SANDBOX) {
+      setBackupNaTela(texto)
+      navigator.clipboard?.writeText(texto).catch(() => {})
+      return
+    }
+
+    const blob = new Blob([texto], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -279,6 +292,22 @@ export default function Ajustes() {
             Tudo fica salvo neste aparelho. Limpar os dados do navegador apaga o histórico — exporte de vez em
             quando.
           </p>
+
+          {backupNaTela && (
+            <div className="space-y-2">
+              <Aviso tom="info">
+                A pré-visualização não deixa a página salvar arquivo. O backup foi copiado para a área de
+                transferência e está abaixo — cole num arquivo <code>.json</code>. No app instalado, o botão
+                baixa direto.
+              </Aviso>
+              <textarea
+                readOnly
+                value={backupNaTela}
+                onFocus={(e) => e.currentTarget.select()}
+                className="campo h-40 w-full font-mono text-[11px] leading-snug"
+              />
+            </div>
+          )}
 
           {confirmarReset ? (
             <div className="space-y-2">

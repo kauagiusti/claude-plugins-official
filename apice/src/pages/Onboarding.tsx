@@ -39,7 +39,7 @@ export default function Onboarding() {
       <div className="space-y-2.5">
         {[
           ['📸', 'Nutrição por foto', 'Uma foto vira lista de alimentos, porções e macros — editável.'],
-          ['🏆', 'Força comparada', 'Cada série mostra seu nível e percentil por peso, sexo e idade.'],
+          ['🏆', 'Força comparada', 'Cada série mostra seu nível e percentil por peso, altura, sexo e idade.'],
           ['📈', 'Progressão real', 'PRs, volume semanal e sugestão de carga para a próxima sessão.'],
         ].map(([icone, titulo, texto]) => (
           <Cartao key={titulo} className="flex gap-3.5">

@@ -226,7 +226,7 @@ function montarContexto(s: ReturnType<typeof useStore.getState>): string {
     `Volume desta semana: ${Math.round(volumeSemanal(s, 0)).toLocaleString('pt-BR')} kg. Semana passada: ${Math.round(volumeSemanal(s, 1)).toLocaleString('pt-BR')} kg.`,
     `Sequência ativa: ${s.jogo.streakAtual} dias. Total de treinos registrados: ${s.treinos.length}.`,
     '',
-    melhores.length ? `RECORDES (percentil na população treinada, ajustado por peso, sexo e idade):\n${melhores.join('\n')}` : 'Sem recordes registrados ainda.',
+    melhores.length ? `RECORDES (percentil na população treinada, ajustado por peso, altura, sexo e idade):\n${melhores.join('\n')}` : 'Sem recordes registrados ainda.',
     score > 0 ? `Score geral de força: ${score.toFixed(0)}/100.` : '',
     '',
     ultimosTreinos.length ? `Últimos treinos:\n${ultimosTreinos.join('\n')}` : '',

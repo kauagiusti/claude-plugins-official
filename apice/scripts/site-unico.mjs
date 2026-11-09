@@ -10,7 +10,7 @@
  * formato que o hospedeiro de artefatos espera, e um navegador abre igual.
  */
 import react from '@vitejs/plugin-react'
-import { readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'vite'
@@ -64,6 +64,9 @@ ${jsSeguro}
 </script>
 `
 
+// dist-site fica fora do git; em clone novo o diretório não existe e o
+// writeFile falhava com ENOENT em vez de criar o caminho.
+await mkdir(dirname(destino), { recursive: true })
 await writeFile(destino, html)
 await rm(saidaTemp, { recursive: true, force: true })
 

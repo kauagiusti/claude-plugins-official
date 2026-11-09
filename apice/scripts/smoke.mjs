@@ -234,7 +234,13 @@ await pagina.keyboard.press('Escape')
 await pagina.waitForTimeout(300)
 
 // ---------------------------- Sugestão de prato -----------------------------
-const cartaoSugestao = () => pagina.locator('text=/Sugest.o para o/i').locator('xpath=../..')
+// Sobe até o cartão inteiro, não até o cabeçalho. O `../..` anterior pegava só
+// o título e o nome do prato — e dois sorteios seguidos podem cair no mesmo
+// modelo com alimentos diferentes, o que reprovava a checagem com o cartão
+// visivelmente trocado na tela. O que o usuário vê mudar são os itens e os
+// macros.
+const cartaoSugestao = () =>
+  pagina.locator('text=/Sugest.o para o/i').locator('xpath=ancestor::div[contains(@class,"cartao")][1]')
 conferir('a página sugere um prato', (await cartaoSugestao().count()) > 0)
 
 const pratoAntes = await cartaoSugestao().innerText()
